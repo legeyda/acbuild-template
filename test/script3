@@ -1,8 +1,11 @@
-begin --build-mode={{mode}}
+begin
+#--build-mode={{mode}}
+#dependency add legeyda.com/centos7:0.2.6
+dependency add quay.io/sameersbn/ubuntu
 set-name legeyda.com/test-java
 
 label add version 1.2.3
 
-run --insecure={{insecure}} --engine={{engine}} bash -c 'touch /var/lib/rpm/* && yum install openjdk && yum clean all'
+run --debug --insecure={{insecure}} --engine={{engine}} /bin/bash -c 'touch /var/lib/rpm/* && yum install openjdk && yum clean all'
 
-write --overwrite {{output}}
+write --overwrite '{{output}}'

@@ -210,7 +210,7 @@ function get-insecure() {
 }
 
 function get-engine() {
-	arg-value "${ACBUILD_RUN_ENGINE}" || echo 'systemd-nspawn'
+	arg-value "${ACBUILD_RUN_ENGINE:-}" || echo 'systemd-nspawn'
 }
 
 # fun: echo '/.-' | sanitize
@@ -386,13 +386,17 @@ function build() {
 	if [[ "$ACBUILD_OPTS" != *--work-path* ]]; then
 		ACBUILD_OPTS="$ACBUILD_OPTS --work-path '$cache_dir'"
 	fi
-
+	
 	# call acbuild to build image
 	rm -rf "$cache_dir/.acbuild"
-	if eval "'$ACBUILD' $ACBUILD_OPTS script $cache_dir/acbuild-script" > "$stdout" 2> "$stderr"; then
+	local command="'$ACBUILD' $ACBUILD_OPTS script $cache_dir/acbuild-script"
+	if eval "$command" > "$stdout" 2> "$stderr"; then
 		echo "$output"
 	else
 		local code=$?
+		errcho "error running command: $command"
+		errcho "the script was: "
+		>&2 cat "$cache_dir/acbuild-script"
 		if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
 		if [[ -f "$stderr" ]]; then cat "$stderr" >&2; fi
 		return $code

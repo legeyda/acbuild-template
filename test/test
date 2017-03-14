@@ -210,32 +210,32 @@ mock_data='  begin   --build-mode={{mode}}
 
 # apply
 assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target apply script2'
-assert-equals 'begin --build-mode=appc
+assert-equals "begin --build-mode=appc
   set-name   test-image  
  
 label   add  version 1.2.3 
 
 
-   write   --overwrite /opt/amd64/test_image-1.2.3-cygwin_nt-10.0-amd64.aci
+   write   --overwrite /opt/amd64/test_image-1.2.3-$(uname | tr '[:upper:]' '[:lower:]')-amd64.aci
 
 
-   test-image' "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target apply script2)"
+   test-image" "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target apply script2)"
 
 # build
 assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build script2'
 assert-equals \
 		"/opt/$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]')/test_image-1.2.3-$(uname | tr '[:upper:]' '[:lower:]')-$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]').aci" \
 		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build script2)"
-assert-equals 'begin --build-mode=appc
+assert-equals "begin --build-mode=appc
   set-name   test-image  
  
 label   add  version 1.2.3 
 
 
-   write   --overwrite /opt/amd64/test_image-1.2.3-cygwin_nt-10.0-amd64.aci
+   write   --overwrite /opt/amd64/test_image-1.2.3-$(uname | tr '[:upper:]' '[:lower:]')-amd64.aci
 
 
-   test-image' "$(cat ../target/acbuild-script)"
+   test-image" "$(cat ../target/acbuild-script)"
 
 
 #assert-ok 'ACBUILD=./mock-acbuild RKT=echo ACBUILD_CACHE_DIR=../target bash ../acbuild-template install ./script2'
