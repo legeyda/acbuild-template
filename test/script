@@ -1,0 +1,9 @@
+ begin --build-mode=script-mode   
+  set-name   script-name  
+label   add  version 1.2.3 
+
+		label	add os reactos
+
+
+	label add arch quantum
+   write   --overwrite image.aci

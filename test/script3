@@ -1,0 +1,8 @@
+begin --build-mode={{mode}}
+set-name legeyda.com/test-java
+
+label add version 1.2.3
+
+run --insecure={{insecure}} --engine={{engine}} bash -c 'touch /var/lib/rpm/* && yum install openjdk && yum clean all'
+
+write --overwrite {{output}}

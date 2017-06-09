@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -e
+
+ALL_ARGS="$@"
+
+while [[ -n "${1:-}" ]]; do
+	if [[ script == "$1" ]]; then
+		shift
+		if [[ -z "${1:-}" ]]; then
+			>&2 echo 'mock-acbulid: missing arguments for script'
+			exit 1
+		fi
+		echo "$ALL_ARGS"
+		cat "$1"
+		shift
+		exit
+	fi
+	shift
+done
+
+>&2 echo 'mock-acbuild: script expected'
+exit 1

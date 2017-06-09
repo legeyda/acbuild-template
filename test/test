@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+set -xue
+pushd $(dirname "$0")
+source "../acbuild-template"
+
+
+unset ACBUILD_CACHE
+unset MKTEMP
+unset ACBUILD
+unset ACBUILD_OPTS
+unset RKT
+unset RKT_OPTS
+unset ACBUILD_IMAGE_NAME
+unset ACBUILD_IMAGE_VERSION
+unset ACBUILD_IMAGE_OS
+unset ACBUILD_IMAGE_ARCH
+unset ACBUILD_IMAGE_EXT
+unset ACBUILD_IMAGE
+
+
+
+function assert-equals() {
+	if [[ "${1:-}" != "${2:-}" ]]; then
+		>&2 echo
+		>&2 echo "failed asserting that expected '${1:-}' equals to actual '${2:-}'"
+		return 1
+	fi
+}
+
+
+function assert-ok() {
+	if ! eval "$@"; then
+		STATUS=$?
+		>&2 echo
+		>&2 echo "failed asserting that expression'$@' ok, return status is $STATUS"
+		return 1
+	fi
+}
+
+
+function assert-error() {
+	if eval "$@"; then
+		STATUS=$?
+		>&2 echo
+		>&2 echo "failed asserting that expression'$@' fails, return status is $STATUS"
+		return 1
+	fi
+}
+
+
+# test assertions
+assert-ok     echo hello
+assert-error  bla-bla-bla
+assert-equals x x
+assert-ok     assert-equals x x
+assert-error  assert-equals x y
+
+
+# arg-value
+assert-ok     arg-value hello
+assert-equals hello $(arg-value hello)
+assert-error  arg-value
+assert-error  arg-value ''
+assert-equals '' $(arg-value)
+
+
+# stream-value
+assert-ok     "echo hello | stream-value"
+assert-equals 'hello world' "$(echo 'hello world' | stream-value)"
+assert-error  'echo | stream-value'
+assert-equals '' "$(echo | stream-value)"
+
+
+# usage
+print-usage > /dev/null
+
+
+# checking arguments
+assert-ok    check-non-empty-arguments 1 2 3
+assert-error check-non-empty-arguments
+
+
+# parse name
+assert-equals 'test-name' $(echo 'set-name test-name' | parse-name)
+assert-equals ''          $(echo 'set-name {{VAR}}'   | parse-name)
+assert-equals 'nameee'    $(echo 'begin
+set-name nameee
+end' | parse-name)
+
+
+# parse label
+assert-equals '1.1.1.1' $(echo 'label add version 1.1.1.1'         | parse-label version)
+assert-equals ''        $(echo 'label add version {{VERSION_VAR}}' | parse-label version)
+assert-ok     'echo "label add version 1.1.1.1" | parse-label version'
+assert-error  'echo | parse-label version'
+
+
+# parse output
+assert-equals 'output'  $(echo 'write --overwrite output' | parse-output)
+assert-equals 'output2' $(echo 'write output2' | parse-output)
+assert-equals ''        $(echo 'label add version {{OUT_VAR}}' | parse-output)
+
+
+# mode-to-ext
+assert-ok     "mode-to-ext appc"
+assert-ok     "mode-to-ext oci"
+assert-error  "mode-to-ext bla"
+assert-error  "mode-to-ext ''"
+assert-error  "mode-to-ext"
+assert-equals aci "$(mode-to-ext appc)"
+assert-equals oci "$(mode-to-ext oci)"
+assert-equals ''  "$(mode-to-ext bla)"
+assert-equals ''  "$(mode-to-ext '')"
+assert-equals ''  "$(mode-to-ext)"
+
+
+# ext-to-mode
+assert-ok     "ext-to-mode aci"
+assert-ok     "ext-to-mode oci"
+assert-error  "ext-to-mode bla"
+assert-error  "ext-to-mode ''"
+assert-error  "ext-to-mode"
+assert-equals appc "$(ext-to-mode aci)"
+assert-equals oci "$(ext-to-mode oci)"
+assert-equals '' "$(ext-to-mode bla)"
+assert-equals ''  "$(ext-to-mode '')"
+assert-equals ''  "$(ext-to-mode)"
+
+
+# get-script
+assert-equals arg-script     $(ACBUILD_SCRIPT=env-script get-script arg-script)
+assert-equals env-script     $(ACBUILD_SCRIPT=env-script get-script)
+assert-equals acbuild-script $(                          get-script)
+
+
+# get-dir-name
+assert-equals env-dir-name $(ACBUILD_IMAGE_DIR_NAME=env-dir-name cache_dir=/tmp get-dir-name)
+assert-equals /tmp         $(ACBUILD_IMAGE_DIR_NAME=             cache_dir=/tmp get-dir-name)
+
+
+# get-mode
+assert-equals script-mode $(cat script | ACBUILD_IMAGE_MODE=env-mode get-mode)
+assert-equals env-mode    $(echo       | ACBUILD_IMAGE_MODE=env-mode get-mode)
+assert-equals appc        $(echo       | ACBUILD_IMAGE_MODE=         get-mode)
+
+
+# get-name
+assert-equals script-name $(cat script | ACBUILD_IMAGE_NAME=env-name get-name)
+assert-equals env-name    $(echo       | ACBUILD_IMAGE_NAME=env-name get-name)
+assert-equals test        $(echo       | ACBUILD_IMAGE_NAME=         get-name)
+
+
+# get-version
+assert-equals weird-version $(echo       | ACBUILD_IMAGE_VERSION=weird-version get-version)
+assert-equals 1.2.3         $(cat script |                                     get-version)
+assert-equals snapshot      $(echo       |                                     get-version)
+
+
+# get-os
+assert-equals reactos $(echo       | ACBUILD_IMAGE_OS=reactos get-os)
+assert-equals reactos $(cat script | ACBUILD_IMAGE_OS=        get-os)
+assert-equals "$(uname | tr '[:upper:]' '[:lower:]')" \
+                      "$(echo      | ACBUILD_IMAGE_OS=        get-os)"
+
+
+# get-arch
+assert-equals quantum $(echo       | ACBUILD_IMAGE_ARCH=quantum get-arch)
+assert-equals quantum $(cat script | ACBUILD_IMAGE_ARCH=        get-arch)
+assert-equals "$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]')" \
+                      $(echo       | ACBUILD_IMAGE_ARCH=        get-arch)
+
+
+# get-ext
+assert-equals superext $(echo | ACBUILD_IMAGE_EXT=superext get-ext)
+assert-equals aci      $(echo | ACBUILD_IMAGE_EXT=         get-ext)
+
+
+# sanitize
+assert-equals 'example_com_name_dash' "$(echo 'example.com/name-dash' | sanitize)"
+
+
+# get-base-name
+assert-equals env-base-name         $(ACBUILD_IMAGE_BASE_NAME=env-base-name name=image version=vers os=oss arch=aar ext=ex get-base-name)
+assert-equals image-vers-oss-aar.ex $(ACBUILD_IMAGE_BASE_NAME=              name=image version=vers os=oss arch=aar ext=ex get-base-name)
+
+
+# get-output
+assert-equals image.aci                     $(cat script | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE='{{ext}}.{{arch}}-{{os}}-{{version}}-{{name}}-env' get-output '{{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}-arg')
+assert-equals image-vers-oss-aar.ex-arg     $(echo       | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE='{{ext}}.{{arch}}-{{os}}-{{version}}-{{name}}-env' get-output '{{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}-arg')
+assert-equals ex.aar-oss-vers-image-env     $(echo       | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE='{{ext}}.{{arch}}-{{os}}-{{version}}-{{name}}-env' get-output)
+assert-equals /tmp/base.zip                 $(echo       | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE=                                                   get-output)
+
+
+# apply-template
+assert-equals 'dn m n v os a e bn i en out' \
+		"$(echo '{{dir-name}} {{mode}} {{name}} {{version}} {{os}} {{arch}} {{ext}} {{base-name}} {{insecure}} {{engine}} {{output}}' \
+				| dir_name=dn mode=m name=n version=v os=os arch=a ext=e base_name=bn insecure=i engine=en output=out apply-template)"
+
+
+# process-template
+# check not to spoil script
+mock_data='bla bla bla'; expected=$mock_data; actual=$(echo $mock_data | process-template); assert-equals "$expected" "$actual"
+mock_data='  begin   --build-mode={{mode}}
+   label add version {{version}}
+   set-name name
+   write --overwrite {{}}
+'
+
+
+
+# apply
+assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target apply script2'
+assert-equals 'begin --build-mode=appc
+  set-name   test-image  
+ 
+label   add  version 1.2.3 
+
+
+   write   --overwrite /opt/amd64/test_image-1.2.3-cygwin_nt-10.0-amd64.aci
+
+
+   test-image' "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target apply script2)"
+
+# build
+assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build script2'
+assert-equals \
+		"/opt/$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]')/test_image-1.2.3-$(uname | tr '[:upper:]' '[:lower:]')-$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]').aci" \
+		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build script2)"
+assert-equals 'begin --build-mode=appc
+  set-name   test-image  
+ 
+label   add  version 1.2.3 
+
+
+   write   --overwrite /opt/amd64/test_image-1.2.3-cygwin_nt-10.0-amd64.aci
+
+
+   test-image' "$(cat ../target/acbuild-script)"
+
+
+#assert-ok 'ACBUILD=./mock-acbuild RKT=echo ACBUILD_CACHE_DIR=../target bash ../acbuild-template install ./script2'
+#assert-ok " --insecure-options=image fetch --full file:///cygdrive/c/Users/a.legeyda/Dropbox/workspace/acbuild-template/test//opt/amd64/test-image-1.2.3-cygwin_nt-10.0-amd64.aci"
+
+
+echo tests ok
+exit
+
+# acbuild-template-build
+ACBUILD='echo acbuild' ACBUILD_CACHE_DIR=../target/test1 ACBUILD_SCRIPT=empty    assert-ok build
+ACBUILD='echo acbuild' ACBUILD_CACHE_DIR=../target/test2 ACBUILD_SCRIPT=script   assert-ok build
+
+echo ok
+exit
+
+
+echo "!!!!!!!!!!!!! OS IS $OS"
+ACBUILD='echo acbuild' CACHE=../target/test3 SCRIPT=acbuild-script-2.template assert-ok build
+
+
+
+
+
+
+
+# acbuild-template --script script build target/image.aci

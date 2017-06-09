@@ -1,0 +1,10 @@
+begin --build-mode={{mode}}
+  set-name   test-image  
+ 
+label   add  version 1.2.3 
+
+
+   write   --overwrite /opt/{{arch}}/{{base-name}}
+
+
+   {{name}}
