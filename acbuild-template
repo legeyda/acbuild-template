@@ -370,9 +370,29 @@ function apply() {
 # env: SCRIPT
 function build() {
 
+	local arg_name_only=false
+	local arg_script=
+	local arg_output=
+	while [[ -n "${1:-}" ]]; do
+		if   [[ _--name-only == "_$1" ]] || [[ _-n == "_$1" ]]; then
+			arg_name_only=true
+			shift
+		elif [[ -z "$arg_script" ]]; then
+			arg_script="$1"
+			shift
+		elif [[ -z "$arg_output" ]]; then
+			arg_output="$1"
+			shift
+		else
+			errxit "unexpected argument $1"
+		fi
+	done
+
 	local cache_dir=$(get-cache-dir)
-	local script_data=$(apply "${1:-}")
-	local output=$(   echo "$script_data" | get-output "${2:-}")
+	local script_data=$(apply "$arg_script")
+	local output=$(   echo "$script_data" | parse-output)
+	[[ -z "$output" ]] && errxit 'wrong output'
+
 	mkdir -p "$(dirname '$output')" "$cache_dir"
 	echo "$script_data" > "$cache_dir/acbuild-script"
 
@@ -386,28 +406,47 @@ function build() {
 	if [[ "$ACBUILD_OPTS" != *--work-path* ]]; then
 		ACBUILD_OPTS="$ACBUILD_OPTS --work-path '$cache_dir'"
 	fi
-	
-	# call acbuild to build image
+
 	rm -rf "$cache_dir/.acbuild"
 	local command="'$ACBUILD' $ACBUILD_OPTS script $cache_dir/acbuild-script"
-	if eval "$command" > "$stdout" 2> "$stderr"; then
-		echo "$output"
+	if [[ "$arg_name_only" == true ]]; then	
+		if eval "$command" > "$stdout" 2> "$stderr"; then
+			echo "$output"
+		else
+			local code=$?
+			if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
+			if [[ -f "$stderr" ]]; then cat "$stderr" >&2; fi
+			errcho "error running command: $command"
+			errcho "the script was: "
+			>&2 cat "$cache_dir/acbuild-script"
+			return $code
+		fi
 	else
-		local code=$?
-		errcho "error running command: $command"
-		errcho "the script was: "
-		>&2 cat "$cache_dir/acbuild-script"
-		if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
-		if [[ -f "$stderr" ]]; then cat "$stderr" >&2; fi
-		return $code
+		eval "$command"
+		return $?
 	fi
-
 }
 
 
 
 # fun: install script
 function install() {
+
+	local arg_name_only=false
+	local arg_script=
+	while [[ -n "${1:-}" ]]; do
+		if   [[ _--name-only == "_$1" ]] || [[ _-n == "_$1" ]]; then
+			arg_name_only=true
+			shift
+		elif [[ -z "$arg_script" ]]; then
+			arg_script="$1"
+			shift
+		else
+			errxit "unexpected argument $1"
+		fi
+	done
+
+
 	# 
 	: ${RKT:=rkt}
 	: ${RKT_OPTS:=}
@@ -422,7 +461,7 @@ function install() {
 	fi
 
 	# build image
-	image=$(build "${1:-}")
+	image=$(build "$arg_script")
 	real_image=$(realpath "$image")
 
 	#
@@ -431,15 +470,21 @@ function install() {
 	local stdout="$cache_dir/rkt-fetch.stdout.log"
 	local stderr="$cache_dir/rkt-fetch.stderr.log"
 
-	if eval "'$RKT' $RKT_OPTS fetch $RKT_FETCH_OPTS 'file://$real_image'" > "$stdout" 2> "$stderr"; then
-		cat "$stdout" | last-line
-	else
-		local code=$?
-		if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
-		if [[ -f "$stderr" ]]; then cat "$stderr" >&2 ; fi
-		return $code
+
+	local command="'$RKT' $RKT_OPTS fetch $RKT_FETCH_OPTS 'file://$real_image'"
+	if [[ "$arg_name_only" == true ]]; then	
+		if eval "$command" > "$stdout" 2> "$stderr"; then
+			cat "$stdout" | last-line
+		else
+			local code=$?
+			if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
+			if [[ -f "$stderr" ]]; then cat "$stderr" >&2 ; fi
+			return $code
+		fi
+	else 
+		eval "$command"
+		return $?
 	fi
-	
 }
 
 

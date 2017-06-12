@@ -222,10 +222,10 @@ label   add  version 1.2.3
    test-image" "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target apply script2)"
 
 # build
-assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build script2'
+assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build --name-only script2'
 assert-equals \
 		"/opt/$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]')/test_image-1.2.3-$(uname | tr '[:upper:]' '[:lower:]')-$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]').aci" \
-		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build script2)"
+		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build --name-only script2)"
 assert-equals "begin --build-mode=appc
   set-name   test-image  
  
