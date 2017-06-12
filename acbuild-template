@@ -20,23 +20,23 @@ Usage:
 
 Environment:
 
-  ACBUILD_SCRIPT
-  ACBUILD_IMAGE_DIR_NAME
-  ACBUILD_IMAGE_MODE
-  ACBUILD_IMAGE_VERSION
-  ACBUILD_IMAGE_OS
-  ACBUILD_IMAGE_ARCH
-  ACBUILD_IMAGE_EXT
-  ACBUILD_RUN_INSECURE
-  ACBUILD_RUN_ENGINE
-  ACBUILD_IMAGE_BASE_NAME
-  ACBUILD_IMAGE
-  ACBUILD_CACHE_DIR
+  ACBUILD_SCRIPT           script to process (./acbuild-script by default)
+  ACBUILD_IMAGE_DIR_NAME   directory to save resulting image
+  ACBUILD_IMAGE_MODE       build mode, appc or oci
+  ACBUILD_IMAGE_VERSION    label add os version (snapshot by default)
+  ACBUILD_IMAGE_OS         label add os value (current by default)
+  ACBUILD_IMAGE_ARCH       label add os value (current by arch)
+  ACBUILD_IMAGE_EXT        image file extension, default aci
+  ACBUILD_RUN_INSECURE     run --insecure=value, defaul false
+  ACBUILD_RUN_ENGINE       run --engine=value
+  ACBUILD_IMAGE_BASE_NAME  image base file name, default {{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}
+  ACBUILD_IMAGE            image file full name
+  ACBUILD_CACHE_DIR        directory to store temporary files
 
-  ACBUILD
+  ACBUILD                  acbuild command, default acbuild itself
   ACBUILD_OPTS
 
-  RKT
+  RKT                      rkt command, default rkt itself
   RKT_OPTS
   RKT_FETCH_OPTS
   RKT_RUN_OPTS
