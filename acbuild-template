@@ -11,10 +11,10 @@ acbuild-template, make acbuild-scripts more declarative
 
 Usage:	
   acbuild-template [-i|--script <script>] \
-    [apply [-o|--output <output>]] \
-    [build [-o|--output <output>] [-s|--silent|-n|--print-name-only] \
-    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]] \
-    [install [-s|--silent|-n|--print-hash-only]] \
+    [apply [-o|--output <output>]]
+    [build [-o|--output <output>] [-s|--silent|-n|--print-name-only]
+    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]]
+    [install [-s|--silent|-n|--print-hash-only]]
     [run <rkt image run parameters>]
 
 Options:
@@ -648,7 +648,7 @@ function run() {
 	local _dir=$(dirname $script)
 	local _opts=$(necho "$@" | sed "s|source=\([^/]\)|source=$_dir/\1|g")
 
-	exec "${RKT:-rkt}" ${RKT_OPTS:-} run "$image_hash" ${RKT_RUN_OPTS:-} "$_opts"
+	exec "${RKT:-rkt}" ${RKT_OPTS:-} run "$image_hash" ${RKT_RUN_OPTS:-} $_opts
 }
 
 function upload-git() {
