@@ -10,11 +10,11 @@ function print-usage() {
 acbuild-template, make acbuild-scripts more declarative
 
 Usage:	
-  acbuild-template [-i|--script <script>] \
+  acbuild-template [-i|--script <script>]
     [apply [-o|--output <output>]]
-    [build [-o|--output <output>] [-s|--silent|-n|--print-name-only]
-    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]]
-    [install [-s|--silent|-n|--print-hash-only]]
+    [build [-o|--output <output>] [-s|--silent|-n|--print-name]
+    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name]
+    [install [-s|--silent|-n|--print-hash]]
     [run <rkt image run parameters>]
 
 Options:
@@ -24,10 +24,8 @@ Options:
   -i --script              input script template to process, default ./acbuild-script
   -o --output              if building, resulting image, if not harcoded in script
                            if signing, resulting signature, by default image with suffix '.asc'
-  -p --keyring             gpg keyring for signing
-  -k --secret-keyring      gpg secret keyring for signing
   -s --silent              print nothing in case of success
-  -n --print-file          like --silent, but print output filename
+  -n --print-name          like --silent, but print output filename
   -n --print-hash          print nothing except installed image hash
 
 Environment:
@@ -45,19 +43,18 @@ Environment:
   ACBUILD_IMAGE            image file full name
   ACBUILD_CACHE_DIR        directory to store temporary files
   
-  ACBUILD_IMAGE_SIGNATURE  
+  ACBUILD_IMAGE_SIGNATURE  .asc-file to save image signature
 
   GPG                      gpg command, default gpg itself
-  GPG_KEYRING
-  GPG_SECURE_KEYRING
+  GPG_OPTS                 
 
   ACBUILD                  acbuild command, default acbuild itself
-  ACBUILD_OPTS
+  ACBUILD_OPTS             
 
   RKT                      rkt command, default rkt itself
-  RKT_OPTS
-  RKT_FETCH_OPTS
-  RKT_RUN_OPTS
+  RKT_OPTS                 
+  RKT_FETCH_OPTS           
+  RKT_RUN_OPTS             
 
 EOF
 }
@@ -532,9 +529,6 @@ sign() {
 	local _output=
 	local _handler=-
 	local _silent=false
-	local _keyring=
-	local _secret_keyring=~/.gnupg/secring.gpg
-	local _default_arg=
 	local _build_opts=
 	while [[ -n "${1:-}" ]]; do
 		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
@@ -550,16 +544,6 @@ sign() {
 			_handler='echo $_output'
 			_build_opts=--silent
 			shift
-		elif   [[ _-p == "_$1" ]] || [[ _--keyring == "_$1" ]]; then
-			[[ -n "${2:-}" ]] || errxit "missing value for $1"
-			_keyring="$2"
-			_default_arg=--no-default-keyring
-			shift 2
-		elif   [[ _-k == "_$1" ]] || [[ _--secret-keyring == "_$1" ]]; then
-			[[ -n "${2:-}" ]] || errxit "missing value for $1"
-			_secret_keyring="$2"
-			_default_arg=--no-default-keyring
-			shift 2
 		else
 			break
 		fi
@@ -568,17 +552,12 @@ sign() {
 	if [[ -z "$sign_output" ]]; then
 		build $_build_opts || return $?
 		[[ -z "$_output" ]] && _output="$output.asc"
-		
-		local _opts=$(add-argument --armor -a <<< "${GPG_OPTS:-}")
-		[[ -n "$_keyring" ]]        && _opts=$(add-argument --no-default-keyring <<< "$_opts")
-		[[ -n "$_keyring" ]]        && _opts=$(add-argument "--keyring '$_keyring'" --keyring <<< "$_opts")
-		[[ -n "$_secret_keyring" ]] && _opts=$(add-argument "--secret-keyring '$_secret_keyring'" --secret-keyring <<< "$_opts")
-		_opts=$(necho "$_opts" | add-argument "--output '$_output'" --output | add-argument "--detach-sig '$output'" --detach-sig)
-
- 		local command="${GPG:-gpg} $_opts"
-		wrap-silent "$command" "$_handler" || return $?
+		local _opts=$(necho "${GPG_OPTS:-}" \
+				| add-argument --armor -a \
+				| add-argument "--output '$_output'" --output \
+				| add-argument "--detach-sig '$output'" --detach-sig)
+		wrap-silent "${GPG:-gpg} $_opts" "$_handler" || return $?
 		sign_output="$_output"
-				
 	elif [[ true != "$_silent" ]]; then
 		echo "$sign_output"
 	fi

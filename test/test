@@ -335,13 +335,11 @@ assert-equals "$data" "$(cat ../target/acbuild-script)"
 # sign
 command='ACBUILD=echo GPG=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 output=image.aci sign_output= sign'
 eval "$command"            | assert-contains --armor '--output image.aci.asc' '--detach-sig image.aci'
-eval "$command"            | assert-not-contains --no-default-keyring
 assert-equals 'image.aci
 first-line' "$(eval $command | head -n 2)"
 eval "$command -o out.asc" | assert-contains --armor '--output out.asc'
 assert-equals '' "$(eval \"$command --silent\")"
 assert-equals image.aci.asc "$(eval $command --print-name | head -n 1)"
-eval "$command --keyring x --secret-keyring y" | assert-contains --no-default-keyring "--keyring x" "--secret-keyring y"
 
 
 
