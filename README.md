@@ -87,11 +87,12 @@ Usage
 From `acbuild-template help`:
 
 	Usage:
-	  acbuild-template [-i|--script <script>]
-	    [apply [-o|--output <output>]]
-	    [build [-o|--output <output>] [-s|--silent|-n|--print-name]
-	    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name]
-	    [install [-s|--silent|-n|--print-hash]]
+	  acbuild-template [-i|--script <script>] \
+	    [apply [-o|--output <output>]] \
+	    [build [-o|--output <output>] [-s|--silent|-n|--print-name] \
+	    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name] \
+	    [install [-s|--silent|-n|--print-hash]] \
+	    [upload [-r|--repo-url <git repository url>]] \
 	    [run <rkt image run parameters>]
 
 	Options:
