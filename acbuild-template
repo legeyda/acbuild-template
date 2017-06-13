@@ -11,12 +11,15 @@ acbuild-template, make acbuild-scripts more declarative
 
 Usage:	
   acbuild-template help
-  acbuild-template script    [<template>[target script]]
-  acbuild-template build     [<template>[<target image>]]
-  acbuild-template install   [<template>]
+  acbuild-template apply     [<template>[target script]]
+  acbuild-template build     [--name-only] [<template>[<target image>]]
+  acbuild-template install   [--name-only] [<template>]
   acbuild-template run       [<template>] [<rtk run args> ... ]
-  acbuild-template upload bitbucket <username> <repo>
-  acbuild-template upload github    <username> <repo>
+
+Options:
+  -h --help                print this message
+  -n --name-only           build:   print nothing except resulting image full name
+                           install: pring nothing except installed image hash
 
 Environment:
 
@@ -44,6 +47,9 @@ Environment:
 EOF
 }
 
+# notes:
+# acbuild-template upload bitbucket <username> <repo>
+# acbuild-template upload github    <username> <repo>
 # todo curl -u {{username}} -X POST https://api.bitbucket.org/2.0/repositories/{{username}}/{{repo}}/downloads -F files=@{filename}
 
 

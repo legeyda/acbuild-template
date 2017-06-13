@@ -3,6 +3,9 @@ set -xue
 pushd $(dirname "$0")
 source "../acbuild-template"
 
+readonly _TEST_OS=$(uname | tr '[:upper:]' '[:lower:]')
+readonly _TEST_ARCH=$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]')
+
 
 unset ACBUILD_CACHE
 unset MKTEMP
@@ -159,14 +162,14 @@ assert-equals snapshot      $(echo       |                                     g
 # get-os
 assert-equals reactos $(echo       | ACBUILD_IMAGE_OS=reactos get-os)
 assert-equals reactos $(cat script | ACBUILD_IMAGE_OS=        get-os)
-assert-equals "$(uname | tr '[:upper:]' '[:lower:]')" \
+assert-equals "${_TEST_OS}" \
                       "$(echo      | ACBUILD_IMAGE_OS=        get-os)"
 
 
 # get-arch
 assert-equals quantum $(echo       | ACBUILD_IMAGE_ARCH=quantum get-arch)
 assert-equals quantum $(cat script | ACBUILD_IMAGE_ARCH=        get-arch)
-assert-equals "$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]')" \
+assert-equals "${_TEST_ARCH}" \
                       $(echo       | ACBUILD_IMAGE_ARCH=        get-arch)
 
 
@@ -216,7 +219,7 @@ assert-equals "begin --build-mode=appc
 label   add  version 1.2.3 
 
 
-   write   --overwrite /opt/amd64/test_image-1.2.3-$(uname | tr '[:upper:]' '[:lower:]')-amd64.aci
+   write   --overwrite /opt/amd64/test_image-1.2.3-${_TEST_OS}-amd64.aci
 
 
    test-image" "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target apply script2)"
@@ -224,7 +227,7 @@ label   add  version 1.2.3
 # build
 assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build --name-only script2'
 assert-equals \
-		"/opt/$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]')/test_image-1.2.3-$(uname | tr '[:upper:]' '[:lower:]')-$(uname -m | sed -e 's/^\(x64\|x86_64\)$/amd64/g' | tr '[:upper:]' '[:lower:]').aci" \
+		"/opt/${_TEST_ARCH}/test_image-1.2.3-${_TEST_OS}-${_TEST_ARCH}.aci" \
 		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build --name-only script2)"
 assert-equals "begin --build-mode=appc
   set-name   test-image  
@@ -232,34 +235,11 @@ assert-equals "begin --build-mode=appc
 label   add  version 1.2.3 
 
 
-   write   --overwrite /opt/amd64/test_image-1.2.3-$(uname | tr '[:upper:]' '[:lower:]')-amd64.aci
+   write   --overwrite /opt/amd64/test_image-1.2.3-${_TEST_OS}-amd64.aci
 
 
    test-image" "$(cat ../target/acbuild-script)"
 
 
-#assert-ok 'ACBUILD=./mock-acbuild RKT=echo ACBUILD_CACHE_DIR=../target bash ../acbuild-template install ./script2'
-#assert-ok " --insecure-options=image fetch --full file:///cygdrive/c/Users/a.legeyda/Dropbox/workspace/acbuild-template/test//opt/amd64/test-image-1.2.3-cygwin_nt-10.0-amd64.aci"
-
-
-echo tests ok
+echo 'tests ok'
 exit
-
-# acbuild-template-build
-ACBUILD='echo acbuild' ACBUILD_CACHE_DIR=../target/test1 ACBUILD_SCRIPT=empty    assert-ok build
-ACBUILD='echo acbuild' ACBUILD_CACHE_DIR=../target/test2 ACBUILD_SCRIPT=script   assert-ok build
-
-echo ok
-exit
-
-
-echo "!!!!!!!!!!!!! OS IS $OS"
-ACBUILD='echo acbuild' CACHE=../target/test3 SCRIPT=acbuild-script-2.template assert-ok build
-
-
-
-
-
-
-
-# acbuild-template --script script build target/image.aci
