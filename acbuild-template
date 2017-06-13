@@ -12,14 +12,14 @@ acbuild-template, make acbuild-scripts more declarative
 Usage:	
   acbuild-template help
   acbuild-template apply     [<template>[target script]]
-  acbuild-template build     [--name-only] [<template>[<target image>]]
-  acbuild-template install   [--name-only] [<template>]
+  acbuild-template build     [-n|--name-only] [<template>[<target image>]]
+  acbuild-template install   [-n|--name-only] [<template>]
   acbuild-template run       [<template>] [<rtk run args> ... ]
 
 Options:
   -h --help                print this message
   -n --name-only           build:   print nothing except resulting image full name
-                           install: pring nothing except installed image hash
+                           install: print nothing except installed image hash
 
 Environment:
 
