@@ -549,30 +549,28 @@ function apply() {
 #      cache_dir:    directory for storing temp data
 #      image_output: global variable to save written image file name for lazyness
 function build() {
-	local _output=
+	#local _output=
 	local silent=false
 	local _print_name=true
-	eval "$(print-parser -o/--output:_output -s/--silent:silent=true,_print_name=false -n/--print-name:silent=true,_print_name=true)"
+	eval "$(print-parser -o/--output:image_output -s/--silent:silent=true,_print_name=false -n/--print-name:silent=true,_print_name=true)"
 
 	if [[ -z "$image_output" ]]; then
 		# do the work
 		cache_dir=$(get-cache-dir)
 		local script_data=$(apply) || return $?
-		_output=$(echo "$script_data" | parse-image-output)
-		if [[ -z "$_output" ]]; then
+		image_output=$(echo "$script_data" | parse-image-output)
+		if [[ -z "$image_output" ]]; then
 			errcho 'wrong script output'
 			return 1
 		fi
 
-		mkdir -p "$(dirname '$_output')" "$cache_dir"
+		mkdir -p "$(dirname '$image_output')" "$cache_dir"
 		echo "$script_data" > "$cache_dir/acbuild-script"
 
 		local _opts=$(add-argument "--work-path '$cache_dir'" --work-path <<< "${ACBUILD_OPTS:-}")
 		rm -rf "$cache_dir/.acbuild"
 		
 		silent-eval "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" || return $?
-		errcho "---------------- _output is $_output ---------"
-		image_output="$_output"
 		if [[ true == "$_print_name" ]]; then
 			echo "$image_output"
 		fi
@@ -591,7 +589,7 @@ function build() {
 #      applied:      is being passed to 'build'
 #      script:       is being passed to 'build'
 sign() {
-	local _output="$image_output.asc"
+	local _output=
 	local silent=false
 	local _build_opts=
 	local _print_name=true
@@ -599,13 +597,12 @@ sign() {
 
 	if [[ -z "$sign_output" ]]; then
 		build $_build_opts || return $?
+		[[ -z "$_output" ]] && _output="$image_output.asc"
+		
 		local _opts=$(necho "${GPG_OPTS:-}" \
 				| add-argument --armor -a \
 				| add-argument "--output '$_output'" --output \
 				| add-argument "--detach-sig '$image_output'" --detach-sig)
-		errcho "================= silent is $silent"
-		errcho "================= args are $@"
-		errcho "================= command is '${GPG:-gpg}' $_opts"
 		silent-eval "'${GPG:-gpg}' $_opts" || return $?
 		sign_output="$_output"
 		if [[ true == "$_print_name" ]]; then
@@ -752,7 +749,7 @@ forward() {
 	for x in  apply build sign install upload run; do
 		if [[ "_$x" == "_$1" ]]; then
 			shift
-			eval $_command "$@"
+			eval $x "$@"
 			return $?
 		fi
 	done

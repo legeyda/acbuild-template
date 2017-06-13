@@ -5,7 +5,7 @@ set-name legeyda.com/test-java
 
 label add version 1.2.3
 
-#run --insecure={{insecure}} --engine={{engine}} -- bash -c 'touch /var/lib/rpm/* && yum install -y nginx && yum clean all'
+run --insecure={{insecure}} --engine={{engine}} -- bash -c 'touch /var/lib/rpm/* && yum install -y nginx && yum clean all'
 run --insecure={{insecure}} --engine={{engine}} -- echo hello
 
 write --overwrite '{{output}}'
