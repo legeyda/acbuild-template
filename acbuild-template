@@ -432,6 +432,8 @@ wrap-silent() {
 
 
 # fun: add-argument <append> [<check1> [<check2> ...]]
+# txt: read stdin, then check if any of arguments are substrings of stdin,
+#      if so append first argument to stdin, then print the result to stdout
 add-argument() {
 	local _value="$(recho)"
 	necho "$_value"
@@ -448,8 +450,8 @@ add-argument() {
 
 
 # fun: apply [-o|--output <destination>]
-# txt: lazily apply 
-# env: script:  script file name to process
+# txt: lazily apply transformation to script remplate and stdout result
+# env: script:  script template file name to process
 #      applied: global variable to write applied script data
 function apply() {
 	local _output=-
@@ -472,11 +474,11 @@ function apply() {
 
 
 # fun: build [-o|--output <output>] [-s|--silent|-n|--print-name]
-# txt: lazily build image from script to output
-# env: output: global variable to save written image file name
-#      cache_dir: 
-#      applied:
-#      script:
+# txt: lazily build image from script template
+# env: script:    is being passed to 'apply'
+#      applied:   is being passed to 'apply'
+#      cache_dir: directory for storing temp data
+#      output:    global variable to save written image file name for lazyness
 function build() {
 	local _output=
 	local _handler=-
@@ -524,7 +526,11 @@ function build() {
 
 
 # fun: sign [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]
-# env: output: global image output file
+# env: sign_output: global variable to save written signature file name for lazyness
+#      output:      global image output file
+#      cache_dir:   is being passed to 'build'
+#      applied:     is being passed to 'build'
+#      script:      is being passed to 'build'
 sign() {
 	local _output=
 	local _handler=-
@@ -568,10 +574,13 @@ sign() {
 # fun: install [-s|--silent|-n|--print-hash]
 # env: cache_dir
 #      script
-#      applied
-#      output
-#      sign_output
-#      image_hash: global installed image hash
+#      sign_output: if set, is used when rkt-fetching
+#      applied:     is being passed to 'sign'
+#      output:      is being passed to 'sign'
+#      image_hash:  is being passed to 'sign'
+#      cache_dir:   is being passed to 'sign'
+#      applied:     is being passed to 'sign'
+#      script:      is being passed to 'sign'
 function install() {
 	local _handler=-
 	local _silent=false
