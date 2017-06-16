@@ -10,16 +10,27 @@ function print-usage() {
 acbuild-template, make acbuild-scripts more declarative
 
 Usage:	
-  acbuild-template help
-  acbuild-template apply     [<template>[target script]]
-  acbuild-template build     [-n|--name-only] [<template>[<target image>]]
-  acbuild-template install   [-n|--name-only] [<template>]
-  acbuild-template run       [<template>] [<rtk run args> ... ]
+  acbuild-template [-i|--script <script>] \
+    [apply [-o|--output <output>]] \
+    [build [-o|--output <output>] [-s|--silent|-n|--print-name-only] \
+    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]] \
+    [install [-s|--silent|-n|--print-hash-only]] \
+    [upload (-t|--type) (git <repo url>|github <user name> <repo name>|bitbucket <user name> <repo name>)] \
+    run <rkt image run parameters>
 
 Options:
   -h --help                print this message
-  -n --name-only           build:   print nothing except resulting image full name
-                           install: print nothing except installed image hash
+  -n --print-name-only     print nothing except resulting image full name
+  -n --print-hash-only     print nothing except installed image hash
+  -i --script              input script template to process, default ./acbuild-script
+  -o --output              if building, resulting image, by default get from script, or
+                           if signing, resulting signature, by default image with suffix '.asc'
+  -p --keyring
+  -k --secret-keyring
+  -s --silent              print nothing except errors
+  -n --print-file-only     print nothing except output filename
+  -n --print-hash-only     print nothing except installed image hash
+  -t --type                upload type git, github or bitbucked
 
 Environment:
 
@@ -35,6 +46,10 @@ Environment:
   ACBUILD_IMAGE_BASE_NAME  image base file name, default {{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}
   ACBUILD_IMAGE            image file full name
   ACBUILD_CACHE_DIR        directory to store temporary files
+  
+  ACBUILD_IMAGE_SIGNATURE  
+  GPG_KEYRING
+  GPG_SECURE_KEYRING
 
   ACBUILD                  acbuild command, default acbuild itself
   ACBUILD_OPTS
@@ -68,7 +83,7 @@ function check-non-empty-arguments() {
 # fun: errcho msg1 msg2 msg3 ..
 # txt: print arguments to stderr
 function errcho() {
-	>&2 echo "$@"
+	[[ -n "$@" ]] && >&2 echo "$@" || true
 }
 
 
@@ -78,10 +93,13 @@ function errxit() {
 }
 
 
+
+
+
 # fun: value arg
 # txt: if arg is nonempty print it, otherwise return error
 function arg-value() {
-	[[ -n "${1:-}" ]] && echo "$1" || return 1
+	[[ -n "${1:-}" ]] && echo -n "$1" || return 1
 }
 
 
@@ -90,16 +108,26 @@ function arg-value() {
 function last-line() {
 	local value
 	read -d '' value
-	echo "${value##*$'\n'}"
+	echo -n "${value##*$'\n'}"
+}
+
+
+necho() {
+	echo -n "$@"
+}
+
+# fun: copy stdin to stdout
+recho() {
+	local value
+	read -d '' value
+	echo "$value"
 }
 
 
 # fun: cat value | stream-value
 # txt: if stdin is nonempty print it, otherwise return error
 function stream-value() {
-	local value
-	read -d '' value
-	arg-value "$value"
+	arg-value "$(recho)"
 }
 
 
@@ -128,20 +156,20 @@ function parse-output() {
 	sed -ne 's/^\s*write\s\+\(--overwrite\s\+\)\?\([^{} ]*\?\)\s*$/\2/gp' | last-line | stream-value
 }
 
-#
+# env: cache_dir: global variable to lazy store
 function get-cache-dir() {
 	echo "${cache_dir:-${ACBUILD_CACHE_DIR:-$(${MKTEMP:-mktemp} -d)}}"
 }
 
 #
 function get-script() {
-	arg-value "${1:-}" || arg-value "${ACBUILD_SCRIPT:-}" || echo 'acbuild-script'
+	arg-value "${1:-}" || arg-value "${ACBUILD_SCRIPT:-}" || necho 'acbuild-script'
 }
 
 
 # env: cache_dir
 function get-dir-name() {
-	arg-value "${ACBUILD_IMAGE_DIR_NAME:-}" || echo "$cache_dir"
+	arg-value "${ACBUILD_IMAGE_DIR_NAME:-}" || necho "$cache_dir"
 }
 
 
@@ -170,7 +198,7 @@ function ext-to-mode() {
 }
 
 function get-mode() {
-	parse-mode || arg-value "${ACBUILD_IMAGE_MODE:-}" || ext-to-mode "${ext:-}" || echo appc
+	parse-mode || arg-value "${ACBUILD_IMAGE_MODE:-}" || ext-to-mode "${ext:-}" || necho appc
 }
 
 
@@ -179,7 +207,7 @@ function get-mode() {
 # env: script: acbuild-script or template which must exist
 #      name:   name if already known
 function get-name() {
-	parse-name || arg-value "$ACBUILD_IMAGE_NAME" || arg-value "$(basename $(pwd))" || echo image
+	parse-name || arg-value "$ACBUILD_IMAGE_NAME" || arg-value "$(basename $(pwd))" || necho image
 }
 
 
@@ -187,13 +215,13 @@ function get-name() {
 # txt: 
 # env: ACBUILD_IMAGE_VERSION
 function get-version() {
-	parse-label version || arg-value "${ACBUILD_IMAGE_VERSION:-}" || cat VERSION 2> /dev/null || echo snapshot
+	parse-label version || arg-value "${ACBUILD_IMAGE_VERSION:-}" || cat VERSION 2> /dev/null || necho snapshot
 }
 
 
 # env: ACBUILD_IMAGE_OS
 function get-os() {
-	parse-label os || arg-value "${ACBUILD_IMAGE_OS:-}" || uname | tr '[:upper:]' '[:lower:]' || echo unknown
+	parse-label os || arg-value "${ACBUILD_IMAGE_OS:-}" || uname | tr '[:upper:]' '[:lower:]' || necho unknown
 }
 
 
@@ -202,21 +230,21 @@ function get-arch() {
 	parse-label arch \
 			|| arg-value "${ACBUILD_IMAGE_ARCH:-}" \
 			|| uname -m | sed -e "s/^\(x64\|x86_64\)$/amd64/g" | tr "[:upper:]" "[:lower:]" \
-			|| echo unknown
+			|| -n echo unknown
 }
 
 
 # env: ACBUILD_IMAGE_EXT
 function get-ext() {
-	arg-value "${ACBUILD_IMAGE_EXT:-}" || mode-to-ext "${mode:-}" || echo 'aci'
+	arg-value "${ACBUILD_IMAGE_EXT:-}" || mode-to-ext "${mode:-}" || necho 'aci'
 }
 
 function get-insecure() {
-	arg-value "${ACBUILD_RUN_INSECURE:-}" || echo 'false'
+	arg-value "${ACBUILD_RUN_INSECURE:-}" || necho 'false'
 }
 
 function get-engine() {
-	arg-value "${ACBUILD_RUN_ENGINE:-}" || echo 'systemd-nspawn'
+	arg-value "${ACBUILD_RUN_ENGINE:-}" || necho 'systemd-nspawn'
 }
 
 # fun: echo '/.-' | sanitize
@@ -237,7 +265,7 @@ function sanitize() {
 #      ext:
 function get-base-name() {
 	arg-value "${ACBUILD_IMAGE_BASE_NAME:-}" \
-			|| echo "$(echo $name | sanitize)-$version-$os-$arch.$ext"
+			|| necho "$(necho $name | sanitize)-$version-$os-$arch.$ext"
 }
 
 
@@ -280,16 +308,16 @@ function apply-template() {
 #      base_name:
 function get-output() {
 	parse-output \
-			|| echo "${1:-}"             | stream-value | output="$dir_name/$base_name" apply-template | stream-value \
-			|| echo "${ACBUILD_IMAGE:-}" | stream-value | output="$dir_name/$base_name" apply-template | stream-value \
-			|| echo "$dir_name/$base_name"
+			|| necho "${1:-}"             | stream-value | output="${output:-$dir_name/$base_name}" apply-template | stream-value \
+			|| necho "${ACBUILD_IMAGE:-}" | stream-value | output="${output:-$dir_name/$base_name}" apply-template | stream-value \
+			|| necho "$dir_name/$base_name"
 }
 
 
 
 
 # fun: cat script-template | process-script
-# txt: 
+# txt: prints resulting script to stdout
 function process-template {
 	data=$(stream-value) || return $?
 
@@ -306,6 +334,7 @@ function process-template {
 	local engine=$(                  get-engine)
 	local output=$(   echo "$data" | get-output "${2:-}")
 
+	echo "$output" > target/output.value.txt	
 	
 	# resolve placeholders inside variables
 	# due to transitive dependencies up to 8 iteration needed, usually none
@@ -338,173 +367,287 @@ function process-template {
 	done
 
 	echo -n "$data" | apply-template
-
 }
 
 
-function get-file-content() {
+get-file-content() {
 	if [[ -z "${1:-}" ]]; then
-		errcho "file not set"
+		errcho "input file name not defined"
 		return 1
 	fi
 	local file_name="$1"
-	if [[ ! -f "$file_name" ]]; then
-		local message="${2:-file '$file_name' not found}"
-		errxit "$message"
+	local error_message="${2:-}"
+	if   [[ _- == "$file_name" ]]; then
+		recho
+	elif [[ -f "$file_name" ]]; then
+		cat "$file_name"
+	else
+		errcho "${error_message:-input file '$file_name' not found}"
+		return 1
 	fi
-	cat "$file_name"
+}
+
+put-file-content() {
+	if [[ -z "${1:-}" ]]; then
+		errcho "output file name not defined"
+		return 1
+	fi
+	local file_name="$1"
+	local error_message="${2:-}"
+	if   [[ _- == "_$file_name" ]]; then
+		recho
+	else
+		errcho '-================================ put here'
+		errcho "file_anm is $file_name"
+		mkdir -p "$(dirname '$file_name')" || true
+		recho > "$file_name" || errxit "${error_message:-output file '$file_name' not found}"
+	fi
 }
 
 
-# fun: apply [<script>[<destination>]]
+
+# fun: apply [-o|--output <destination>]
+# txt: lazily apply 
+# env: script:  script file name to process
+#      applied: global variable to write applied script data
 function apply() {
-	[[ -n "${3:-}" ]] && errxit 'too many arguments'
-
-	local script=$(get-script "${1:-}") 
-	local script_data=$(get-file-content "$script" "script '$script' not found") #|| errxit "script $script not found"
-	
-	# write script
-	if [[ -z "${2:-}" ]] || [[ _- == "_${2:-}" ]] ; then
-		echo -n "$script_data" | process-template
-	else
-		echo -n "$script_data" | process-template > "$2"
+	local _output=-
+	while [[ -n "${1:-}" ]]; do
+		if   [[ _-o == "_${1:-}" ]] || [[ _--output == "_${1:-}" ]]; then
+			[[ -n "${2:-}" ]] || errxit "missing value for $1"
+			_output="$2"
+			shift 2
+		else
+			break
+		fi
+	done
+	if [[ -z "$applied" ]]; then
+		applied=$(get-file-content "$script" | process-template) || return $?
 	fi
+	echo "$applied" | put-file-content "$_output" || return $?
+	forward "$@" || return $?
 }
 
 
-# fun: build [<script>]
-# env: SCRIPT
+
+# fun: build [-o|--output <output>] [-s|--silent|-n|--print-name]
+# txt: lazily build image from script to output
+# env: output: global variable to save written image file name
+#      cache_dir: 
+#      applied:
+#      script:
 function build() {
-
-	local arg_name_only=false
-	local arg_script=
-	local arg_output=
+	local _output=
+	local _silent=
+	local _print_name=
 	while [[ -n "${1:-}" ]]; do
-		if   [[ _--name-only == "_$1" ]] || [[ _-n == "_$1" ]]; then
-			arg_name_only=true
+		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
+			[[ -n "${2:-}" ]] || errxit "missing value for $1"
+			_output="$2"
+			shift 2
+		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
+			[[ -z "${_print_name}" ]] || errxit "contradicting option $1"
+			_silent=true
 			shift
-		elif [[ -z "$arg_script" ]]; then
-			arg_script="$1"
-			shift
-		elif [[ -z "$arg_output" ]]; then
-			arg_output="$1"
+		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
+			[[ -z "${_silent}" ]] || errxit "contradicting option $1"
+			_print_name=true
 			shift
 		else
-			errxit "unexpected argument $1"
+			break
 		fi
 	done
 
-	local cache_dir=$(get-cache-dir)
-	local script_data=$(apply "$arg_script")
-	local output=$(   echo "$script_data" | parse-output)
-	[[ -z "$output" ]] && errxit 'wrong output'
+	if [[ -z "$output" ]]; then
+		# do the work
+		cache_dir=$(get-cache-dir)
+		local script_data=$(apply) || return $?
+		output=$(echo "$script_data" | parse-output)
+		[[ -z "$output" ]] && errxit 'wrong script output'
 
-	mkdir -p "$(dirname '$output')" "$cache_dir"
-	echo "$script_data" > "$cache_dir/acbuild-script"
+		mkdir -p "$(dirname '$output')" "$cache_dir"
+		echo "$script_data" > "$cache_dir/acbuild-script"
 
-	# run acbuild
-	local stdout="$cache_dir/acbuild-script.stdout.log"
-	local stderr="$cache_dir/acbuild-script.stderr.log"
+		# run acbuild
+		local stdout="$cache_dir/acbuild-script.stdout.log"
+		#local stderr="$cache_dir/acbuild-script.stderr.log"
 
-	#
-	: ${ACBUILD:=acbuild}
-	: ${ACBUILD_OPTS:=}
-	if [[ "$ACBUILD_OPTS" != *--work-path* ]]; then
-		ACBUILD_OPTS="$ACBUILD_OPTS --work-path '$cache_dir'"
-	fi
-
-	rm -rf "$cache_dir/.acbuild"
-	local command="'$ACBUILD' $ACBUILD_OPTS script $cache_dir/acbuild-script"
-	if [[ "$arg_name_only" == true ]]; then	
-		if eval "$command" > "$stdout" 2> "$stderr"; then
-			echo "$output"
-		else
-			local code=$?
-			if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
-			if [[ -f "$stderr" ]]; then cat "$stderr" >&2; fi
-			errcho "error running command: $command"
-			errcho "the script was: "
-			>&2 cat "$cache_dir/acbuild-script"
-			return $code
+		#
+		: ${ACBUILD:=acbuild}
+		: ${ACBUILD_OPTS:=}
+		if [[ "$ACBUILD_OPTS" != *--work-path* ]]; then
+			ACBUILD_OPTS="$ACBUILD_OPTS --work-path '$cache_dir'"
 		fi
-	else
-		eval "$command"
-		return $?
+
+		rm -rf "$cache_dir/.acbuild"
+		local command="'$ACBUILD' $ACBUILD_OPTS script $cache_dir/acbuild-script"
+		if [[ true == "$_silent" ]] || [[ true == "$_print_name" ]]; then	
+			if eval "$command" > "$stdout"; then
+				if [[ true == "$_print_name" ]]; then
+					echo "$output"
+				fi
+			else
+				local code=$?
+				if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
+				#if [[ -f "$stderr" ]]; then cat "$stderr" >&2; fi
+				errcho "error running command: $command"
+				errcho "the script was: "
+				>&2 cat "$cache_dir/acbuild-script"
+				return $code
+			fi
+		else
+			eval "$command" || return $?
+		fi
+		output="$_output"
+	elif [[ true != "$_silent" ]]; then
+		echo "$output"
 	fi
+	forward "$@" || return $?
+}
+
+# fun: sign [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]
+# env: output: global image output file
+sign() {
+	local _output=
+	local _silent=
+	local _name=
+	local _keyring=
+	local _secret_keyring=
+	while [[ -n "${1:-}" ]]; do
+		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
+			[[ -n "${2:-}" ]] || errxit "missing value for $1"
+			_output="$2"
+			shift 2
+		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
+			[[ -n "${_name}" ]] || errxit "contradicting option $1"
+			_silent=true
+			shift
+		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
+			[[ -n "${_silent}" ]] || errxit "contradicting option $1"
+			_name=true
+			shift
+		elif   [[ _-p == "_$1" ]] || [[ _--keyring == "_$1" ]]; then
+			[[ -n "${2:-}" ]] || errxit "missing value for $1"
+			_keyring="$2"
+			shift 2
+		elif   [[ _-k == "_$1" ]] || [[ _--secret-keyring == "_$1" ]]; then
+			[[ -n "${2:-}" ]] || errxit "missing value for $1"
+			_secret_keyring="$2"
+			shift 2
+		else
+			break
+		fi
+	done
+
+	if [[ -z "$sign_output" ]]; then
+		build --silent || return $?
+		sign_output=hello-from-sign
+		echo hello
+
+		local command=hello
+		if [[ true == "$_silent" ]] || [[ true == "$_print_name" ]]; then	
+			if eval "$command" > "$stdout"; then
+				if [[ true == "$_print_name" ]]; then
+					echo "$output"
+				fi
+			else
+				local code=$?
+				if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
+				#if [[ -f "$stderr" ]]; then cat "$stderr" >&2; fi
+				errcho "error running command: $command"
+				errcho "the script was: "
+				>&2 cat "$cache_dir/acbuild-script"
+				return $code
+			fi
+		else
+			eval "$command" || return $?
+		fi
+
+	elif [[ true != "$silent" ]]; then
+		echo "$sign_output"
+	fi
+	forward "$@" || return $?
 }
 
 
-
-# fun: install script
+# fun: install [-s|--silent|-n|--print-hash]
+# env: cache_dir
+#      script
+#      applied
+#      output
+#      sign_output
+#      image_hash: global installed image hash
 function install() {
-
-	local arg_name_only=false
-	local arg_script=
+	local _silent=
+	local _print_hash=
 	while [[ -n "${1:-}" ]]; do
-		if   [[ _--name-only == "_$1" ]] || [[ _-n == "_$1" ]]; then
-			arg_name_only=true
+		if [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
+			[[ -n "${_name}" ]] || errxit "contradicting option $1"
+			_silent=true
 			shift
-		elif [[ -z "$arg_script" ]]; then
-			arg_script="$1"
+		elif [[ _-n == "_$1" ]] || [[ _--print-hash == "_$1" ]]; then
+			[[ -n "${_silent}" ]] || errxit "contradicting option $1"
+			_name=true
 			shift
 		else
-			errxit "unexpected argument $1"
+			if [[ -z "$image_hash" ]]; then
+				build --silent || return $?
+
+				: ${RKT:=rkt}
+				: ${RKT_OPTS:=}
+				: ${RKT_FETCH_OPTS:=}
+
+				if [[ "$RKT_FETCH_OPTS" != *--full* ]]; then
+					RKT_FETCH_OPTS="$RKT_FETCH_OPTS --full"
+				fi
+
+				# build image
+				image=$(build --print-name)
+				real_image=$(realpath "$image")
+
+				#
+				cache_dir=${cache_dir:-${ACBUILD_CACHE_DIR:-$(${MKTEMP:-mktemp} -d)}}
+				mkdir -p "$cache_dir"
+				local stdout="$cache_dir/rkt-fetch.stdout.log"
+				local stderr="$cache_dir/rkt-fetch.stderr.log"
+
+				# todo fix all
+				local command="'$RKT' $RKT_OPTS fetch $RKT_FETCH_OPTS 'file://$real_image'"
+				if [[ "$arg_name_only" == true ]]; then	
+					if eval "$command" > "$stdout" 2> "$stderr"; then
+						image_hash=$(cat "$stdout" | last-line)
+					else
+						local code=$?
+						if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
+						if [[ -f "$stderr" ]]; then cat "$stderr" >&2 ; fi
+						return $code
+					fi
+				else 
+					eval "$command"
+					return $?
+				fi
+
+			elif [[ true != "$silent" ]]; then
+				echo "$image_hash"
+			fi
+			forward "$@" || return $?
 		fi
 	done
-
-
-	# 
-	: ${RKT:=rkt}
-	: ${RKT_OPTS:=}
-	: ${RKT_FETCH_OPTS:=}
-
-	if [[ "$RKT_OPTS" != *--insecure-options* ]]; then
-		RKT_OPTS="$RKT_OPTS --insecure-options=image"
-	fi
-
-	if [[ "$RKT_FETCH_OPTS" != *--full* ]]; then
-		RKT_FETCH_OPTS="$RKT_FETCH_OPTS --full"
-	fi
-
-	# build image
-	image=$(build "$arg_script")
-	real_image=$(realpath "$image")
-
-	#
-	cache_dir=${cache_dir:-${ACBUILD_CACHE_DIR:-$(${MKTEMP:-mktemp} -d)}}
-	mkdir -p "$cache_dir"
-	local stdout="$cache_dir/rkt-fetch.stdout.log"
-	local stderr="$cache_dir/rkt-fetch.stderr.log"
-
-
-	local command="'$RKT' $RKT_OPTS fetch $RKT_FETCH_OPTS 'file://$real_image'"
-	if [[ "$arg_name_only" == true ]]; then	
-		if eval "$command" > "$stdout" 2> "$stderr"; then
-			cat "$stdout" | last-line
-		else
-			local code=$?
-			if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
-			if [[ -f "$stderr" ]]; then cat "$stderr" >&2 ; fi
-			return $code
-		fi
-	else 
-		eval "$command"
-		return $?
-	fi
 }
 
 
-
+# env: cache_dir
+#      script
+#      applied
+#      output
+#      sign_output
+#      image_hash
 function run() {
 
 	: ${RKT:=rkt}
 	: ${RKT_OPTS:=}
 	: ${RKT_RUN_OPTS:=}
 
-	if [[ "$RKT_OPTS" != *--insecure-options* ]]; then
-		RKT_OPTS="$RKT_OPTS --insecure-options=all"
-	fi
-	
 	local image_hash
 	if [[ _-* == "_${1:-}" ]]; then
 		image_hash=$(install)
@@ -514,46 +657,76 @@ function run() {
 	fi
 	image_hash=123
 
-	eval "'$RKT' $RKT_OPTS run '$image_hash' $RKT_RUN_OPTS ""$@"
+	exec "$RKT" $RKT_OPTS run "$image_hash" $RKT_RUN_OPTS "$@"
 }
 
 
-
-function main() {
-
-	check-non-empty-arguments "$@"
-
-	cache_dir=
-
-	# if help requested
-	if [[ help == "$1" ]] || [[ _--help == "_$1" ]] || [[ _-h == "_$1" ]] || [[ _-? == "_$1" ]]; then
-		echo "$USAGE"
-		return 0
-	fi
-
-	if   [[ apply   == "${1:-}" ]]; then
+# fun: [script=<script>] forward [-o|--output <output>]
+# txt: 
+# env: cache_dir
+#      script
+#      applied
+#      output
+#      sign_output
+#      image_hash      
+forward() {
+	if   [[ -z "${1:-}" ]]; then
+		return
+	elif [[ apply   == "$1" ]]; then
 		shift
 		apply "$@" || return $?
-	elif   [[ build   == "${1:-}" ]]; then
+	elif [[ build   == "$1" ]]; then
 		shift
 		build "$@" || return $?
-
-	elif [[ install == "${1:-}" ]]; then
+	elif [[ sign    == "$1" ]]; then
 		shift
+		sign "$@" || return $?
+	elif [[ install == "$1" ]]; then
+		shift 
 		install "$@" || return $?
-
-	elif [[ run     == "${1:-}" ]]; then
+	elif [[ run     == "$1" ]]; then
 		shift
 		run "$@" || return $?
-
 	else
-		echo "unknown command '${1:-}', see acbuild-scripter help"
+		errxit "unexpected argument $1"
 	fi
+}
+
+function main() {
+	# "global" variables
+	# 
+	local cache_dir=
+
+	# script template to process, set once at startup
+	local script=$(get-script)
+
+	# cache to store applied script text beween apply-calls
+	local applied=
+
+	# cache to store written image file name between build-calls
+	local output=
+	local sign_output=
+	local image_hash=
+
+	# parse common arguments
+	while [[ -n "${1:-}" ]]; do
+		if   [[ _-i == "_$1" ]] || [[ _--script == "_$1" ]]; then
+			[[ -n "${2:-}" ]] || errxit "missing value for $1"
+			script="$2"
+			shift 2
+		else
+			break;
+		fi
+	done
+
+	# execute commands
+	forward "$@"
 }
 
 
 
-if [[ _acbuild-template == _$(basename "$0") ]]; then
+# todo better condition wanted
+if [[ "$0" = "$BASH_SOURCE" ]]; then
 	main "$@"
 fi
 

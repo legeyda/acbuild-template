@@ -74,6 +74,20 @@ assert-error  'echo | stream-value'
 assert-equals '' "$(echo | stream-value)"
 
 
+# get-file-content
+assert-error 'echo hello | get-file-content'
+assert-equals hello "$(echo hello | get-file-content -)"
+assert-error  'echo hello | get-file-content not-existent-file'
+mkdir -p ../target
+echo hello > ../target/_test
+assert-equals hello "$(get-file-content ../target/_test)"
+
+
+# put-file-content
+assert-error 'put-file-content'
+assert-equals hello "$(echo hello | put-file-content -)"
+
+
 # usage
 print-usage > /dev/null
 
@@ -212,8 +226,7 @@ mock_data='  begin   --build-mode={{mode}}
 
 
 # apply
-assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target apply script2'
-assert-equals "begin --build-mode=appc
+data="begin --build-mode=appc
   set-name   test-image  
  
 label   add  version 1.2.3 
@@ -222,23 +235,21 @@ label   add  version 1.2.3
    write   --overwrite /opt/amd64/test_image-1.2.3-${_TEST_OS}-amd64.aci
 
 
-   test-image" "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target apply script2)"
+   test-image"
+assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 apply'
+assert-equals "$data" "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 apply)"
+assert-equals "$data" "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 apply -o -)"
+# test output to file
+assert-ok "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 apply -o ../target/_test)"
+assert-equals "$data" "$(cat ../target/_test)"
+
 
 # build
-assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build --name-only script2'
+assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 output= build'
 assert-equals \
 		"/opt/${_TEST_ARCH}/test_image-1.2.3-${_TEST_OS}-${_TEST_ARCH}.aci" \
-		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target build --name-only script2)"
-assert-equals "begin --build-mode=appc
-  set-name   test-image  
- 
-label   add  version 1.2.3 
-
-
-   write   --overwrite /opt/amd64/test_image-1.2.3-${_TEST_OS}-amd64.aci
-
-
-   test-image" "$(cat ../target/acbuild-script)"
+		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 output= build --print-name)"
+assert-equals "$data" "$(cat ../target/acbuild-script)"
 
 
 echo 'tests ok'
