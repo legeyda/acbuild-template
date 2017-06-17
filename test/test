@@ -75,8 +75,12 @@ assert-equals '' "$(echo | stream-value)"
 
 
 # get-file-content
+data='1
+2
+3'
 assert-error 'echo hello | get-file-content'
 assert-equals hello "$(echo hello | get-file-content -)"
+assert-equals "$data" "$(echo "$data" | get-file-content -)"
 assert-error  'echo hello | get-file-content not-existent-file'
 mkdir -p ../target
 echo hello > ../target/_test
@@ -86,6 +90,24 @@ assert-equals hello "$(get-file-content ../target/_test)"
 # put-file-content
 assert-error 'put-file-content'
 assert-equals hello "$(echo hello | put-file-content -)"
+assert-ok     'echo put-hello | put-file-content ../target/_test'
+assert-equals 'put-hello' "$(cat ../target/_test)"
+
+
+# wrap-silent
+assert-equals ''    "$(wrap-silent 'echo hello')"
+assert-equals hello "$(wrap-silent 'echo hello' recho)"
+assert-equals hello "$(wrap-silent 'echo hello' 'grep hello')"
+assert-equals hello "$(wrap-silent 'echo hello' 'grep hello')"
+assert-equals ''    "$(wrap-silent 'echos')"
+
+
+# add-argument
+assert-equals ' --hello'            "$(echo                 | add-argument --hello)"
+assert-equals ' --hello'            "$(echo ' --hello'      | add-argument --hello)"
+assert-equals ' --hello --hi --new' "$(echo ' --hello --hi' | add-argument --new)"
+assert-equals ' --hello --hi'       "$(echo ' --hello --hi' | add-argument --new --hi)"
+#assert-equals ' --hello'            "$(echo ' --hello'      | add-argument --hello arg1 arg2)"
 
 
 # usage
@@ -114,6 +136,7 @@ assert-error  'echo | parse-label version'
 
 # parse output
 assert-equals 'output'  $(echo 'write --overwrite output' | parse-output)
+assert-equals 'output'  $(echo 'write --overwrite "output"' | parse-output)
 assert-equals 'output2' $(echo 'write output2' | parse-output)
 assert-equals ''        $(echo 'label add version {{OUT_VAR}}' | parse-output)
 

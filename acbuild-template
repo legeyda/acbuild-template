@@ -106,27 +106,35 @@ function arg-value() {
 # fun: echo <MULTILINE> | last-line
 # txt: built-in equivalent of 'tail -n 1'
 function last-line() {
-	local value
-	read -d '' value
+	local value=
+	read -rd '' value
 	echo -n "${value##*$'\n'}"
 }
 
 
 necho() {
-	echo -n "$@"
+	echo -nE "$@"
 }
 
 # fun: copy stdin to stdout
+# txt: 'echo hello | recho' does not work, use 'echo hello | echo $(recho)'
 recho() {
-	local value
-	read -d '' value
-	echo "$value"
+	# option 1
+	#necho "$(< /dev/stdin)"
+
+	# option 2
+	cat
+
+	# option 3
+	#local value=
+	#read -d '' value
+	#echo "$value"
 }
 
 
 # fun: cat value | stream-value
 # txt: if stdin is nonempty print it, otherwise return error
-function stream-value() {
+stream-value() {
 	arg-value "$(recho)"
 }
 
@@ -153,7 +161,8 @@ function parse-label() {
 # fun: cat acbuild-script |   parse-oputout
 # txt: parse acbuld-script and get image version (value ignored if contains placeholders)
 function parse-output() {
-	sed -ne 's/^\s*write\s\+\(--overwrite\s\+\)\?\([^{} ]*\?\)\s*$/\2/gp' | last-line | stream-value
+	#sed -ne 's/^\s*write\s\+\(--overwrite\s\+\)\?\([^{} ]*\?\)\s*$/\2/gp' | last-line | stream-value
+	sed -ne 's/^\s*write\s\+\(--overwrite\s\+\)\?["'\'']\?\([^{}"'\'' ]*\?\)["'\'']\?\s*$/\2/gp' | last-line | stream-value
 }
 
 # env: cache_dir: global variable to lazy store
@@ -377,7 +386,7 @@ get-file-content() {
 	fi
 	local file_name="$1"
 	local error_message="${2:-}"
-	if   [[ _- == "$file_name" ]]; then
+	if   [[ _- == "_$file_name" ]]; then
 		recho
 	elif [[ -f "$file_name" ]]; then
 		cat "$file_name"
@@ -397,14 +406,51 @@ put-file-content() {
 	if   [[ _- == "_$file_name" ]]; then
 		recho
 	else
-		errcho '-================================ put here'
-		errcho "file_anm is $file_name"
 		mkdir -p "$(dirname '$file_name')" || true
 		recho > "$file_name" || errxit "${error_message:-output file '$file_name' not found}"
 	fi
 }
 
+# fun: wrap-silent command <handler>
+# txt: evaluates commnd, in case of success pipes stdout to handler and outputs result
+#      in case of error, print diagnosting information to stderr
+wrap-silent() {
+	local producer="$1"
+	local handler="${2:-}"
+	local data=
+	if data="$(eval $producer)" ; then
+		if [[ _- == "_$handler" ]]; then
+			necho "$data"
+		elif [[ -n "$handler" ]]; then
+			#errcho "handler is $handler"
+			#echo hello | eval recho
+			necho "$data" | eval "$handler" || return $?
+		fi
+	else
+		local code=$?
+		errcho "error running command: $producer"
+		errcho "return code: $code"
+		[[ -n "$data" ]] && errcho "standard output: $data"
+		return $code
+	fi
+}
 
+
+
+# fun: add-argument <append> [<check1> [<check2> ...]]
+add-argument() {
+	local _value="$(recho)"
+	necho "$_value"
+	local _append="$1"
+	while [[ -n "${1:-}" ]]; do
+		if [[ " $_value " == *"$1"* ]]; then
+			errcho heeeeeeeere
+			return
+		fi
+		shift
+	done
+	necho " $_append"
+}
 
 # fun: apply [-o|--output <destination>]
 # txt: lazily apply 
@@ -438,20 +484,18 @@ function apply() {
 #      script:
 function build() {
 	local _output=
-	local _silent=
-	local _print_name=
+	local _handler=-
+	#	local _handler='echo $(recho)'
 	while [[ -n "${1:-}" ]]; do
 		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
 			[[ -n "${2:-}" ]] || errxit "missing value for $1"
 			_output="$2"
 			shift 2
 		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
-			[[ -z "${_print_name}" ]] || errxit "contradicting option $1"
-			_silent=true
+			_handler=
 			shift
 		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
-			[[ -z "${_silent}" ]] || errxit "contradicting option $1"
-			_print_name=true
+			_handler='echo $output'
 			shift
 		else
 			break
@@ -463,76 +507,52 @@ function build() {
 		cache_dir=$(get-cache-dir)
 		local script_data=$(apply) || return $?
 		output=$(echo "$script_data" | parse-output)
+		#errcho "script_data is $script_data"
 		[[ -z "$output" ]] && errxit 'wrong script output'
 
 		mkdir -p "$(dirname '$output')" "$cache_dir"
 		echo "$script_data" > "$cache_dir/acbuild-script"
 
-		# run acbuild
-		local stdout="$cache_dir/acbuild-script.stdout.log"
-		#local stderr="$cache_dir/acbuild-script.stderr.log"
-
-		#
-		: ${ACBUILD:=acbuild}
-		: ${ACBUILD_OPTS:=}
-		if [[ "$ACBUILD_OPTS" != *--work-path* ]]; then
-			ACBUILD_OPTS="$ACBUILD_OPTS --work-path '$cache_dir'"
-		fi
-
+		local _opts=$(add-argument "--work-path '$cache_dir'" --work-path <<< "${ACBUILD_OPTS:-}")
 		rm -rf "$cache_dir/.acbuild"
-		local command="'$ACBUILD' $ACBUILD_OPTS script $cache_dir/acbuild-script"
-		if [[ true == "$_silent" ]] || [[ true == "$_print_name" ]]; then	
-			if eval "$command" > "$stdout"; then
-				if [[ true == "$_print_name" ]]; then
-					echo "$output"
-				fi
-			else
-				local code=$?
-				if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
-				#if [[ -f "$stderr" ]]; then cat "$stderr" >&2; fi
-				errcho "error running command: $command"
-				errcho "the script was: "
-				>&2 cat "$cache_dir/acbuild-script"
-				return $code
-			fi
-		else
-			eval "$command" || return $?
-		fi
-		output="$_output"
-	elif [[ true != "$_silent" ]]; then
+		wrap-silent "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" "$_handler" || return $?
+		
+	elif [[ -n "${_handler:-}" ]]; then
 		echo "$output"
 	fi
 	forward "$@" || return $?
 }
 
+
+
 # fun: sign [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]
 # env: output: global image output file
 sign() {
-	local _output=
-	local _silent=
-	local _name=
+	local _output="$output.asc"
+	local _handler=-
 	local _keyring=
 	local _secret_keyring=
+	local _default_arg=
 	while [[ -n "${1:-}" ]]; do
 		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
 			[[ -n "${2:-}" ]] || errxit "missing value for $1"
 			_output="$2"
 			shift 2
 		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
-			[[ -n "${_name}" ]] || errxit "contradicting option $1"
-			_silent=true
+			_handler=
 			shift
 		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
-			[[ -n "${_silent}" ]] || errxit "contradicting option $1"
-			_name=true
+			_handler='echo $output'
 			shift
 		elif   [[ _-p == "_$1" ]] || [[ _--keyring == "_$1" ]]; then
 			[[ -n "${2:-}" ]] || errxit "missing value for $1"
 			_keyring="$2"
+			_default_arg=--no-default-keyring
 			shift 2
 		elif   [[ _-k == "_$1" ]] || [[ _--secret-keyring == "_$1" ]]; then
 			[[ -n "${2:-}" ]] || errxit "missing value for $1"
 			_secret_keyring="$2"
+			_default_arg=--no-default-keyring
 			shift 2
 		else
 			break
@@ -541,28 +561,18 @@ sign() {
 
 	if [[ -z "$sign_output" ]]; then
 		build --silent || return $?
-		sign_output=hello-from-sign
-		echo hello
+		
+		local _opts=$(add-argument --armor -a <<< "${GPG_OPTS:-}")
+		[[ -n "$_keyring" ]] || [[ -n "$_secret_keyring" ]] && _opts=$(add-argument --no-default-keyring <<< "$_opts")
+		[[ -n "$_keyring" ]]        && _opts=$(add-argument "--keyring '$_keyring'" --keyring <<< "$_opts")
+		[[ -n "$_secret_keyring" ]] && _opts=$(add-argument "--secret-keyring '$_secret_keyring'" --secret-keyring <<< "$_opts")
+		_opts=$(add-argument "--output '$_output'" --output <<< "$_opts")
+		_opts=$(add-argument "--detach-sig '$output'" --detach-sig <<< "$_opts")
 
-		local command=hello
-		if [[ true == "$_silent" ]] || [[ true == "$_print_name" ]]; then	
-			if eval "$command" > "$stdout"; then
-				if [[ true == "$_print_name" ]]; then
-					echo "$output"
-				fi
-			else
-				local code=$?
-				if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
-				#if [[ -f "$stderr" ]]; then cat "$stderr" >&2; fi
-				errcho "error running command: $command"
-				errcho "the script was: "
-				>&2 cat "$cache_dir/acbuild-script"
-				return $code
-			fi
-		else
-			eval "$command" || return $?
-		fi
-
+		local command="${GPG:-gpg} $_opts"
+		wrap-silent "$command" "$_handler" || return $?
+		
+		sign_output="$output"
 	elif [[ true != "$silent" ]]; then
 		echo "$sign_output"
 	fi
