@@ -68,9 +68,9 @@ Introduction
 2.	With a single command build/install image or run container from the script using default values, which acbuild-template substitutes for you:
 	
 		$ cd path/to/script
-		$ acbuild-template build --name-only
+		$ acbuild-template build --print-name
 		/tmp/tmp.duwasSaaLk/example_com_nginx-1.2.3-linux-amd64.aci
-		$ acbuild-template install --name-only
+		$ acbuild-template install --hash-only
 		sha512-0a1cb92dc276b0f9bedf87981e61ecde
 		$ acbuild-template run
 		...
@@ -84,16 +84,26 @@ Of course, values can be customized, eg:
 Usage
 -----
 
-	  acbuild-template help
-	  acbuild-template apply     [<template>[target script]]
-	  acbuild-template build     [-n|--name-only] [<template>[<target image>]]
-	  acbuild-template install   [-n|--name-only] [<template>]
-	  acbuild-template run       [<template>] [<rtk run args> ... ]
+	Usage:	
+	  acbuild-template [-i|--script <script>] \
+	    [apply [-o|--output <output>]] \
+	    [build [-o|--output <output>] [-s|--silent|-n|--print-name-only] \
+	    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]] \
+	    [install [-s|--silent|-n|--print-hash-only]] \
+	    [run <rkt image run parameters>]
 
 	Options:
 	  -h --help                print this message
-	  -n --name-only           build:   print nothing except resulting image full name
-	                           install: print nothing except installed image hash
+	  -n --print-name          print nothing except resulting image full name
+	  -n --print-hash          print nothing except installed image hash
+	  -i --script              input script template to process, default ./acbuild-script
+	  -o --output              if building, resulting image, if not harcoded in script
+	                           if signing, resulting signature, by default image with suffix '.asc'
+	  -p --keyring             gpg keyring for signing
+	  -k --secret-keyring      gpg secret keyring for signing
+	  -s --silent              print nothing in case of success
+	  -n --print-file          like --silent, but print output filename
+	  -n --print-hash          print nothing except installed image hash
 
 	Environment:
 
@@ -103,12 +113,18 @@ Usage
 	  ACBUILD_IMAGE_VERSION    label add os version (snapshot by default)
 	  ACBUILD_IMAGE_OS         label add os value (current by default)
 	  ACBUILD_IMAGE_ARCH       label add os value (current by arch)
-	  ACBUILD_IMAGE_EXT        image file extension, default aci
+	  ACBUILD_IMAGE_EXT        image file extension, default aci  
 	  ACBUILD_RUN_INSECURE     run --insecure=value, defaul false
 	  ACBUILD_RUN_ENGINE       run --engine=value
 	  ACBUILD_IMAGE_BASE_NAME  image base file name, default {{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}
 	  ACBUILD_IMAGE            image file full name
 	  ACBUILD_CACHE_DIR        directory to store temporary files
+	  
+	  ACBUILD_IMAGE_SIGNATURE  
+
+	  GPG                      gpg command, default gpg itself
+	  GPG_KEYRING
+	  GPG_SECURE_KEYRING
 
 	  ACBUILD                  acbuild command, default acbuild itself
 	  ACBUILD_OPTS
@@ -117,3 +133,4 @@ Usage
 	  RKT_OPTS
 	  RKT_FETCH_OPTS
 	  RKT_RUN_OPTS
+

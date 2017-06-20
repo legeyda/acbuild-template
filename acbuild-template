@@ -15,22 +15,20 @@ Usage:
     [build [-o|--output <output>] [-s|--silent|-n|--print-name-only] \
     [sign  [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]] \
     [install [-s|--silent|-n|--print-hash-only]] \
-    [upload (-t|--type) (git <repo url>|github <user name> <repo name>|bitbucket <user name> <repo name>)] \
-    run <rkt image run parameters>
+    [run <rkt image run parameters>]
 
 Options:
   -h --help                print this message
-  -n --print-name-only     print nothing except resulting image full name
-  -n --print-hash-only     print nothing except installed image hash
+  -n --print-name          print nothing except resulting image full name
+  -n --print-hash          print nothing except installed image hash
   -i --script              input script template to process, default ./acbuild-script
-  -o --output              if building, resulting image, by default get from script, or
+  -o --output              if building, resulting image, if not harcoded in script
                            if signing, resulting signature, by default image with suffix '.asc'
-  -p --keyring
-  -k --secret-keyring
-  -s --silent              print nothing except errors
-  -n --print-file-only     print nothing except output filename
-  -n --print-hash-only     print nothing except installed image hash
-  -t --type                upload type git, github or bitbucked
+  -p --keyring             gpg keyring for signing
+  -k --secret-keyring      gpg secret keyring for signing
+  -s --silent              print nothing in case of success
+  -n --print-file          like --silent, but print output filename
+  -n --print-hash          print nothing except installed image hash
 
 Environment:
 
@@ -40,7 +38,7 @@ Environment:
   ACBUILD_IMAGE_VERSION    label add os version (snapshot by default)
   ACBUILD_IMAGE_OS         label add os value (current by default)
   ACBUILD_IMAGE_ARCH       label add os value (current by arch)
-  ACBUILD_IMAGE_EXT        image file extension, default aci
+  ACBUILD_IMAGE_EXT        image file extension, default aci  
   ACBUILD_RUN_INSECURE     run --insecure=value, defaul false
   ACBUILD_RUN_ENGINE       run --engine=value
   ACBUILD_IMAGE_BASE_NAME  image base file name, default {{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}
@@ -48,6 +46,8 @@ Environment:
   ACBUILD_CACHE_DIR        directory to store temporary files
   
   ACBUILD_IMAGE_SIGNATURE  
+
+  GPG                      gpg command, default gpg itself
   GPG_KEYRING
   GPG_SECURE_KEYRING
 
@@ -106,8 +106,7 @@ function arg-value() {
 # fun: echo <MULTILINE> | last-line
 # txt: built-in equivalent of 'tail -n 1'
 function last-line() {
-	local value=
-	read -rd '' value
+	local value=$(recho)
 	echo -n "${value##*$'\n'}"
 }
 
@@ -343,8 +342,6 @@ function process-template {
 	local engine=$(                  get-engine)
 	local output=$(   echo "$data" | get-output "${2:-}")
 
-	echo "$output" > target/output.value.txt	
-	
 	# resolve placeholders inside variables
 	# due to transitive dependencies up to 8 iteration needed, usually none
 	for i in 1 2 3 4 5 6 7 8 9; do
@@ -495,7 +492,7 @@ function build() {
 			_handler=
 			shift
 		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
-			_handler='echo $output'
+			_handler='echo $_output'
 			shift
 		else
 			break
@@ -506,17 +503,17 @@ function build() {
 		# do the work
 		cache_dir=$(get-cache-dir)
 		local script_data=$(apply) || return $?
-		output=$(echo "$script_data" | parse-output)
+		_output=$(echo "$script_data" | parse-output)
 		#errcho "script_data is $script_data"
-		[[ -z "$output" ]] && errxit 'wrong script output'
+		[[ -z "$_output" ]] && errxit 'wrong script output'
 
-		mkdir -p "$(dirname '$output')" "$cache_dir"
+		mkdir -p "$(dirname '$_output')" "$cache_dir"
 		echo "$script_data" > "$cache_dir/acbuild-script"
 
 		local _opts=$(add-argument "--work-path '$cache_dir'" --work-path <<< "${ACBUILD_OPTS:-}")
 		rm -rf "$cache_dir/.acbuild"
 		wrap-silent "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" "$_handler" || return $?
-		
+		output="$_output"
 	elif [[ -n "${_handler:-}" ]]; then
 		echo "$output"
 	fi
@@ -528,10 +525,10 @@ function build() {
 # fun: sign [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]
 # env: output: global image output file
 sign() {
-	local _output="$output.asc"
+	local _output=
 	local _handler=-
 	local _keyring=
-	local _secret_keyring=
+	local _secret_keyring=~/.gnupg/secring.gpg
 	local _default_arg=
 	while [[ -n "${1:-}" ]]; do
 		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
@@ -542,7 +539,7 @@ sign() {
 			_handler=
 			shift
 		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
-			_handler='echo $output'
+			_handler='echo $_output'
 			shift
 		elif   [[ _-p == "_$1" ]] || [[ _--keyring == "_$1" ]]; then
 			[[ -n "${2:-}" ]] || errxit "missing value for $1"
@@ -561,18 +558,18 @@ sign() {
 
 	if [[ -z "$sign_output" ]]; then
 		build --silent || return $?
+		[[ -z "$_output" ]] && _output="$output.asc"
 		
 		local _opts=$(add-argument --armor -a <<< "${GPG_OPTS:-}")
-		[[ -n "$_keyring" ]] || [[ -n "$_secret_keyring" ]] && _opts=$(add-argument --no-default-keyring <<< "$_opts")
+		[[ -z "$_keyring" ]]        && _opts=$(add-argument --no-default-keyring <<< "$_opts")
 		[[ -n "$_keyring" ]]        && _opts=$(add-argument "--keyring '$_keyring'" --keyring <<< "$_opts")
 		[[ -n "$_secret_keyring" ]] && _opts=$(add-argument "--secret-keyring '$_secret_keyring'" --secret-keyring <<< "$_opts")
-		_opts=$(add-argument "--output '$_output'" --output <<< "$_opts")
-		_opts=$(add-argument "--detach-sig '$output'" --detach-sig <<< "$_opts")
+		_opts=$(necho "$_opts" | add-argument "--output '$_output'" --output | add-argument "--detach-sig '$output'" --detach-sig)
 
-		local command="${GPG:-gpg} $_opts"
+ 		local command="${GPG:-gpg} $_opts"
 		wrap-silent "$command" "$_handler" || return $?
-		
-		sign_output="$output"
+		sign_output="$_output"
+				
 	elif [[ true != "$silent" ]]; then
 		echo "$sign_output"
 	fi
@@ -588,61 +585,39 @@ sign() {
 #      sign_output
 #      image_hash: global installed image hash
 function install() {
-	local _silent=
-	local _print_hash=
+	local _output=
+	local _handler=-
+	#	local _handler='echo $(recho)'
 	while [[ -n "${1:-}" ]]; do
 		if [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
-			[[ -n "${_name}" ]] || errxit "contradicting option $1"
-			_silent=true
+			_handler=
 			shift
 		elif [[ _-n == "_$1" ]] || [[ _--print-hash == "_$1" ]]; then
-			[[ -n "${_silent}" ]] || errxit "contradicting option $1"
-			_name=true
+			_handler='echo $image_hash'
 			shift
 		else
-			if [[ -z "$image_hash" ]]; then
-				build --silent || return $?
-
-				: ${RKT:=rkt}
-				: ${RKT_OPTS:=}
-				: ${RKT_FETCH_OPTS:=}
-
-				if [[ "$RKT_FETCH_OPTS" != *--full* ]]; then
-					RKT_FETCH_OPTS="$RKT_FETCH_OPTS --full"
-				fi
-
-				# build image
-				image=$(build --print-name)
-				real_image=$(realpath "$image")
-
-				#
-				cache_dir=${cache_dir:-${ACBUILD_CACHE_DIR:-$(${MKTEMP:-mktemp} -d)}}
-				mkdir -p "$cache_dir"
-				local stdout="$cache_dir/rkt-fetch.stdout.log"
-				local stderr="$cache_dir/rkt-fetch.stderr.log"
-
-				# todo fix all
-				local command="'$RKT' $RKT_OPTS fetch $RKT_FETCH_OPTS 'file://$real_image'"
-				if [[ "$arg_name_only" == true ]]; then	
-					if eval "$command" > "$stdout" 2> "$stderr"; then
-						image_hash=$(cat "$stdout" | last-line)
-					else
-						local code=$?
-						if [[ -f "$stdout" ]]; then cat "$stdout" >&2; fi
-						if [[ -f "$stderr" ]]; then cat "$stderr" >&2 ; fi
-						return $code
-					fi
-				else 
-					eval "$command"
-					return $?
-				fi
-
-			elif [[ true != "$silent" ]]; then
-				echo "$image_hash"
-			fi
-			forward "$@" || return $?
+			break
 		fi
 	done
+
+	if [[ -z "$image_hash" ]]; then
+		build --silent || return $?
+		local _opts=$(echo "${RKT_FETCH_OPTS:=}" | add-argument --full)
+		real_output=$(realpath "$output")
+
+		local _command="'${RKT:-rkt}' ${RKT_OPTS:-} fetch $_opts 'file://$real_output'"
+		if [[ -n "$sign_output" ]]; then
+			_command="$_command --signature '$sign_output'"
+		fi
+
+		local _data
+		_data=$(eval $_command) || return $?
+		image_hash=$(necho "$_data" | last-line)
+		wrap-silent "necho '$_data'" "$_handler" || return $?
+	elif [[ true != "$silent" ]]; then
+		echo "$image_hash"
+	fi
+	forward "$@" || return $?
 }
 
 
@@ -653,21 +628,12 @@ function install() {
 #      sign_output
 #      image_hash
 function run() {
+	install --silent || return $?
+	exec "${RKT:-rkt}" ${RKT_OPTS:-} run "$image_hash" ${RKT_RUN_OPTS:-} "$@"
+}
 
-	: ${RKT:=rkt}
-	: ${RKT_OPTS:=}
-	: ${RKT_RUN_OPTS:=}
-
-	local image_hash
-	if [[ _-* == "_${1:-}" ]]; then
-		image_hash=$(install)
-	else
-		image_hash=$(install "${1:-}")
-		shift
-	fi
-	image_hash=123
-
-	exec "$RKT" $RKT_OPTS run "$image_hash" $RKT_RUN_OPTS "$@"
+function upload-git() {
+	echo
 }
 
 
@@ -694,6 +660,9 @@ forward() {
 	elif [[ install == "$1" ]]; then
 		shift 
 		install "$@" || return $?
+	elif [[ upload-git == "$1" ]]; then
+		shift
+		upload "$@" || return $?
 	elif [[ run     == "$1" ]]; then
 		shift
 		run "$@" || return $?
@@ -703,6 +672,12 @@ forward() {
 }
 
 function main() {
+	if [[ -z "${1:-}" ]]; then
+		errcho 'at least one command expected'
+		print-usage
+		return 1
+	fi
+
 	# "global" variables
 	# 
 	local cache_dir=
@@ -730,13 +705,13 @@ function main() {
 	done
 
 	# execute commands
-	forward "$@"
+	forward "$@" || return $?
 }
 
 
 
 # todo better condition wanted
-if [[ "$0" = "$BASH_SOURCE" ]]; then
-	main "$@"
+if [[ "$0" == "$BASH_SOURCE" ]]; then
+	main "$@" || exit $?
 fi
 

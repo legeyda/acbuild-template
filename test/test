@@ -50,13 +50,68 @@ function assert-error() {
 	fi
 }
 
+# fun: echo <haystack> | assert-contains needle
+assert-contains() {
+	local _haystack="$(recho)"
+	while [[ -n "${1:-}" ]]; do
+		if [[ "_$_haystack" != *"$1"* ]]; then
+			>&2 echo
+			>&2 echo "failed asserting that $_haystack contains $1"
+			return 1
+		fi
+		shift
+	done
+}
+
+# fun: echo <haystack> | assert-contains needle
+assert-not-contains() {
+	local _haystack="$(recho)"
+	while [[ -n "${1:-}" ]]; do
+		if [[ "_$_haystack" == *"$1"* ]]; then
+			>&2 echo
+			>&2 echo "failed asserting that $_haystack does not contains $1"
+			return 1
+		fi
+		shift
+	done
+}
+
+assert-empty() {
+	local _data="$(recho)"
+	if [[ -n "$_data" ]]; then
+		>&2 echo
+		>&2 echo "failed asserting that data is empty, value is $_data"
+		return 1
+	fi
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # test assertions
-assert-ok     echo hello
-assert-error  bla-bla-bla
-assert-equals x x
-assert-ok     assert-equals x x
-assert-error  assert-equals x y
+assert-ok       echo hello
+assert-error    bla-bla-bla
+assert-equals   x x
+assert-ok       assert-equals x x
+assert-error    assert-equals x y
+assert-ok       'echo abc   | assert-contains b'
+assert-error    'echo hello | assert-contains b'
 
 
 # arg-value
@@ -267,12 +322,41 @@ assert-ok "$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=
 assert-equals "$data" "$(cat ../target/_test)"
 
 
+
 # build
 assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 output= build'
 assert-equals \
 		"/opt/${_TEST_ARCH}/test_image-1.2.3-${_TEST_OS}-${_TEST_ARCH}.aci" \
 		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 output= build --print-name)"
 assert-equals "$data" "$(cat ../target/acbuild-script)"
+
+
+
+# sign
+command='ACBUILD=echo GPG=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 output=image.aci sign_output= sign'
+eval "$command"            | assert-contains --armor '--output image.aci.asc' '--detach-sig image.aci'
+eval "$command"            | assert-not-contains --no-default-keyring
+assert-equals 'first-line' "$(eval $command | head -n 1)"
+eval "$command -o out.asc" | assert-contains --armor '--output out.asc'
+assert-equals '' "$(eval \"$command --silent\")"
+assert-equals image.aci.asc "$(eval $command --print-name | head -n 1)"
+eval "$command --keyring x --secret-keyring y" | assert-contains --no-default-keyring "--keyring x" "--secret-keyring y"
+
+
+
+
+# install
+command='ACBUILD=echo GPG=echo RKT=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 output=image.aci sign_output= image_hash= install'
+assert-equals 'first-line' $(eval $command | head -n 1)
+eval $command | tail -n 1 | assert-contains --full fetch file://$(realpath image.aci)
+eval $command --silent | assert-empty
+eval $command --print-hash | head -n 1 | assert-not-contains first-line
+eval $command --print-hash | head -n 1 | assert-contains --full fetch file://$(realpath image.aci)
+
+
+
+# run
+
 
 
 echo 'tests ok'
