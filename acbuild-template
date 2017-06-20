@@ -583,7 +583,6 @@ function install() {
 	local _handler=-
 	local _silent=false
 	local _build_opts=
-	#	local _handler='echo $(recho)'
 	while [[ -n "${1:-}" ]]; do
 		if [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
 			_handler=
@@ -634,6 +633,8 @@ git-upload() {
 			&& $_git $_git_opts init \
 			&& $_git $_git_opts checkout -b "$_name" \
 			&& $_git $_git_opts add "$_name" \
+			&& $_git $_git_opts config user.name "acbuild-template" \
+			&& $_git $_git_opts config user.email "acbuild-template@example.com" \
 			&& $_git $_git_opts commit -m "uploading file $_name" \
 			&& $_git $_git_opts remote add origin "$_repo" \
 			&& $_git $_git_opts push --force --set-upstream origin "$_name" \
@@ -642,7 +643,7 @@ git-upload() {
 			|| return $?
 }
 
-
+# fun: upload [--repository|-r git-repo-url] 
 # env: cache_dir
 #      script
 #      sign_output: if set, is also uploading
@@ -656,8 +657,17 @@ upload() {
 	local _handler=-
 	local _silent=false
 	local _build_opts=
+	local _repo=
 	while [[ -n "${1:-}" ]]; do
-		if [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
+		if   [[ _-r == "_$1" ]] || [[ _--repo-url == "_$1" ]]; then
+			if [[ -z "${2:-}" ]]; then
+				errcho "upload: missing value for $1"
+				return 1
+			fi
+			_repo="$2"
+			shift
+			shift
+		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
 			_handler=
 			_silent=true
 			_build_opts=--silent
@@ -667,10 +677,15 @@ upload() {
 		fi
 	done
 
+	if [[ -z "$_repo" ]]; then
+		errcho "repository not set"
+		return 1
+	fi
+
 	build $_build_opts || return $?
-	local _command="do-upload '$_output'"
-	[[ -n "$_sign_output" ]] && _command="$_command && do-upload '$_sign_output'"
-	wrap-silent "_$command" "$_handler" || return $?
+	local _command="git-upload '$output' '$_repo'"
+	[[ -n "$sign_output" ]] && _command="$_command && git-upload '$sign_output' '$_repo'"
+	wrap-silent "$_command" "$_handler" || return $?
 	
 	forward "$@" || return $?
 }
@@ -692,9 +707,6 @@ function run() {
 	exec "${RKT:-rkt}" ${RKT_OPTS:-} run "$image_hash" ${RKT_RUN_OPTS:-} $_opts
 }
 
-function upload-git() {
-	echo
-}
 
 
 # fun: [script=<script>] forward [-o|--output <output>]
