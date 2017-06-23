@@ -561,7 +561,7 @@ sign() {
 		[[ -z "$_output" ]] && _output="$output.asc"
 		
 		local _opts=$(add-argument --armor -a <<< "${GPG_OPTS:-}")
-		[[ -z "$_keyring" ]]        && _opts=$(add-argument --no-default-keyring <<< "$_opts")
+		[[ -n "$_keyring" ]]        && _opts=$(add-argument --no-default-keyring <<< "$_opts")
 		[[ -n "$_keyring" ]]        && _opts=$(add-argument "--keyring '$_keyring'" --keyring <<< "$_opts")
 		[[ -n "$_secret_keyring" ]] && _opts=$(add-argument "--secret-keyring '$_secret_keyring'" --secret-keyring <<< "$_opts")
 		_opts=$(necho "$_opts" | add-argument "--output '$_output'" --output | add-argument "--detach-sig '$output'" --detach-sig)
@@ -629,7 +629,12 @@ function install() {
 #      image_hash
 function run() {
 	install --silent || return $?
-	exec "${RKT:-rkt}" ${RKT_OPTS:-} run "$image_hash" ${RKT_RUN_OPTS:-} "$@"
+
+	# replace file names in volume declarations relative to script location, with absolute path
+	local _dir=$(dirname $script)
+	local _opts=$(necho "$@" | sed "s|source=\([^/]\)|source=$_dir/\1|g")
+
+	exec "${RKT:-rkt}" ${RKT_OPTS:-} run "$image_hash" ${RKT_RUN_OPTS:-} "$_opts"
 }
 
 function upload-git() {
