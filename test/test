@@ -336,7 +336,8 @@ assert-equals "$data" "$(cat ../target/acbuild-script)"
 command='ACBUILD=echo GPG=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 output=image.aci sign_output= sign'
 eval "$command"            | assert-contains --armor '--output image.aci.asc' '--detach-sig image.aci'
 eval "$command"            | assert-not-contains --no-default-keyring
-assert-equals 'first-line' "$(eval $command | head -n 1)"
+assert-equals 'image.aci
+first-line' "$(eval $command | head -n 2)"
 eval "$command -o out.asc" | assert-contains --armor '--output out.asc'
 assert-equals '' "$(eval \"$command --silent\")"
 assert-equals image.aci.asc "$(eval $command --print-name | head -n 1)"
@@ -346,8 +347,9 @@ eval "$command --keyring x --secret-keyring y" | assert-contains --no-default-ke
 
 
 # install
-command='ACBUILD=echo GPG=echo RKT=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 output=image.aci sign_output= image_hash= install'
-assert-equals 'first-line' $(eval $command | head -n 1)
+command='RKT=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 output=image.aci sign_output= image_hash= install'
+assert-equals 'image.aci
+first-line' "$(eval $command | head -n 2)"
 eval $command | tail -n 1 | assert-contains --full fetch file://$(realpath image.aci)
 eval $command --silent | assert-empty
 eval $command --print-hash | head -n 1 | assert-not-contains first-line

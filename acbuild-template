@@ -415,12 +415,12 @@ wrap-silent() {
 	local producer="$1"
 	local handler="${2:-}"
 	local data=
+
+	[[ _- == "_$1" ]] && producer=recho
 	if data="$(eval $producer)" ; then
 		if [[ _- == "_$handler" ]]; then
 			necho "$data"
 		elif [[ -n "$handler" ]]; then
-			#errcho "handler is $handler"
-			#echo hello | eval recho
 			necho "$data" | eval "$handler" || return $?
 		fi
 	else
@@ -441,13 +441,14 @@ add-argument() {
 	local _append="$1"
 	while [[ -n "${1:-}" ]]; do
 		if [[ " $_value " == *"$1"* ]]; then
-			errcho heeeeeeeere
 			return
 		fi
 		shift
 	done
 	necho " $_append"
 }
+
+
 
 # fun: apply [-o|--output <destination>]
 # txt: lazily apply 
@@ -482,6 +483,7 @@ function apply() {
 function build() {
 	local _output=
 	local _handler=-
+	local _silent=false
 	#	local _handler='echo $(recho)'
 	while [[ -n "${1:-}" ]]; do
 		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
@@ -490,9 +492,11 @@ function build() {
 			shift 2
 		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
 			_handler=
+			_silent=true
 			shift
 		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
 			_handler='echo $_output'
+			_silent=true
 			shift
 		else
 			break
@@ -514,7 +518,7 @@ function build() {
 		rm -rf "$cache_dir/.acbuild"
 		wrap-silent "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" "$_handler" || return $?
 		output="$_output"
-	elif [[ -n "${_handler:-}" ]]; then
+	elif [[ true != "$_silent" ]]; then
 		echo "$output"
 	fi
 	forward "$@" || return $?
@@ -527,9 +531,11 @@ function build() {
 sign() {
 	local _output=
 	local _handler=-
+	local _silent=false
 	local _keyring=
 	local _secret_keyring=~/.gnupg/secring.gpg
 	local _default_arg=
+	local _build_opts=
 	while [[ -n "${1:-}" ]]; do
 		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
 			[[ -n "${2:-}" ]] || errxit "missing value for $1"
@@ -537,9 +543,12 @@ sign() {
 			shift 2
 		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
 			_handler=
+			_silent=true
+			_build_opts=--silent
 			shift
 		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
 			_handler='echo $_output'
+			_build_opts=--silent
 			shift
 		elif   [[ _-p == "_$1" ]] || [[ _--keyring == "_$1" ]]; then
 			[[ -n "${2:-}" ]] || errxit "missing value for $1"
@@ -557,7 +566,7 @@ sign() {
 	done
 
 	if [[ -z "$sign_output" ]]; then
-		build --silent || return $?
+		build $_build_opts || return $?
 		[[ -z "$_output" ]] && _output="$output.asc"
 		
 		local _opts=$(add-argument --armor -a <<< "${GPG_OPTS:-}")
@@ -570,7 +579,7 @@ sign() {
 		wrap-silent "$command" "$_handler" || return $?
 		sign_output="$_output"
 				
-	elif [[ true != "$silent" ]]; then
+	elif [[ true != "$_silent" ]]; then
 		echo "$sign_output"
 	fi
 	forward "$@" || return $?
@@ -585,15 +594,19 @@ sign() {
 #      sign_output
 #      image_hash: global installed image hash
 function install() {
-	local _output=
 	local _handler=-
+	local _silent=false
+	local _build_opts=
 	#	local _handler='echo $(recho)'
 	while [[ -n "${1:-}" ]]; do
 		if [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
 			_handler=
+			_silent=true
+			_build_opts=--silent
 			shift
 		elif [[ _-n == "_$1" ]] || [[ _--print-hash == "_$1" ]]; then
 			_handler='echo $image_hash'
+			_build_opts=--silent
 			shift
 		else
 			break
@@ -601,7 +614,7 @@ function install() {
 	done
 
 	if [[ -z "$image_hash" ]]; then
-		build --silent || return $?
+		build $_build_opts || return $?
 		local _opts=$(echo "${RKT_FETCH_OPTS:=}" | add-argument --full)
 		real_output=$(realpath "$output")
 
@@ -611,12 +624,13 @@ function install() {
 		fi
 
 		local _data
-		_data=$(eval $_command) || return $?
+		_data="$(eval $_command)" || return $?
 		image_hash=$(necho "$_data" | last-line)
-		wrap-silent "necho '$_data'" "$_handler" || return $?
-	elif [[ true != "$silent" ]]; then
+		necho "$_data" | wrap-silent - "$_handler" || return $?
+	elif [[ true != "$_silent" ]]; then
 		echo "$image_hash"
 	fi
+
 	forward "$@" || return $?
 }
 
@@ -628,7 +642,7 @@ function install() {
 #      sign_output
 #      image_hash
 function run() {
-	install --silent || return $?
+	install || return $?
 
 	# replace file names in volume declarations relative to script location, with absolute path
 	local _dir=$(dirname $script)
