@@ -86,7 +86,7 @@ Usage
 
 From `acbuild-template help`:
 
-	Usage:	
+	Usage:
 	  acbuild-template [-i|--script <script>]
 	    [apply [-o|--output <output>]]
 	    [build [-o|--output <output>] [-s|--silent|-n|--print-name]

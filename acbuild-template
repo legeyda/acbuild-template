@@ -620,6 +620,61 @@ function install() {
 	forward "$@" || return $?
 }
 
+# fun: git-upload <file to upload> <git repo url>
+# txt: upload file to git repo
+git-upload() {
+	local _file="$1" \
+			&& local _repo="$2" \
+			&& local _name="$(basename $_file)" \
+			&& local _temp="$(mktemp --directory)" \
+			&& cp "$_file" "$_temp" \
+			&& pushd "$_temp" \
+			&& local _git="${GIT:-git}" \
+			&& local _git_opts="${GIT_OPTS:-}" \
+			&& $_git $_git_opts init \
+			&& $_git $_git_opts checkout -b "$_name" \
+			&& $_git $_git_opts add "$_name" \
+			&& $_git $_git_opts commit -m "uploading file $_name" \
+			&& $_git $_git_opts remote add origin "$_repo" \
+			&& $_git $_git_opts push --force --set-upstream origin "$_name" \
+			&& rm -rf "$_temp" \
+			&& popd \
+			|| return $?
+}
+
+
+# env: cache_dir
+#      script
+#      sign_output: if set, is also uploading
+#      applied:     is being passed to 'sign'
+#      output:      is being passed to 'sign'
+#      image_hash:  is being passed to 'sign'
+#      cache_dir:   is being passed to 'sign'
+#      applied:     is being passed to 'sign'
+#      script:      is being passed to 'sign'
+upload() {
+	local _handler=-
+	local _silent=false
+	local _build_opts=
+	while [[ -n "${1:-}" ]]; do
+		if [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
+			_handler=
+			_silent=true
+			_build_opts=--silent
+			shift
+		else
+			break
+		fi
+	done
+
+	build $_build_opts || return $?
+	local _command="do-upload '$_output'"
+	[[ -n "$_sign_output" ]] && _command="$_command && do-upload '$_sign_output'"
+	wrap-silent "_$command" "$_handler" || return $?
+	
+	forward "$@" || return $?
+}
+
 
 # env: cache_dir
 #      script
@@ -659,6 +714,9 @@ forward() {
 	  || [[ _-?     == "_$1" ]]; then
 		shift
 		print-usage "$@" || return $?
+	elif [[ upload   == "$1" ]]; then
+		shift
+		upload "$@" || return $?
 	elif [[ apply   == "$1" ]]; then
 		shift
 		apply "$@" || return $?
