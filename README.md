@@ -84,12 +84,14 @@ Of course, values can be customized, eg:
 Usage
 -----
 
+From `acbuild-template help`:
+
 	Usage:	
-	  acbuild-template [-i|--script <script>] \
-	    [apply [-o|--output <output>]] \
-	    [build [-o|--output <output>] [-s|--silent|-n|--print-name-only] \
-	    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]] \
-	    [install [-s|--silent|-n|--print-hash-only]] \
+	  acbuild-template [-i|--script <script>]
+	    [apply [-o|--output <output>]]
+	    [build [-o|--output <output>] [-s|--silent|-n|--print-name]
+	    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name]
+	    [install [-s|--silent|-n|--print-hash]]
 	    [run <rkt image run parameters>]
 
 	Options:
@@ -99,10 +101,8 @@ Usage
 	  -i --script              input script template to process, default ./acbuild-script
 	  -o --output              if building, resulting image, if not harcoded in script
 	                           if signing, resulting signature, by default image with suffix '.asc'
-	  -p --keyring             gpg keyring for signing
-	  -k --secret-keyring      gpg secret keyring for signing
 	  -s --silent              print nothing in case of success
-	  -n --print-file          like --silent, but print output filename
+	  -n --print-name          like --silent, but print output filename
 	  -n --print-hash          print nothing except installed image hash
 
 	Environment:
@@ -120,17 +120,15 @@ Usage
 	  ACBUILD_IMAGE            image file full name
 	  ACBUILD_CACHE_DIR        directory to store temporary files
 	  
-	  ACBUILD_IMAGE_SIGNATURE  
+	  ACBUILD_IMAGE_SIGNATURE  .asc-file to save image signature
 
 	  GPG                      gpg command, default gpg itself
-	  GPG_KEYRING
-	  GPG_SECURE_KEYRING
+	  GPG_OPTS                 
 
 	  ACBUILD                  acbuild command, default acbuild itself
-	  ACBUILD_OPTS
+	  ACBUILD_OPTS             
 
 	  RKT                      rkt command, default rkt itself
-	  RKT_OPTS
-	  RKT_FETCH_OPTS
-	  RKT_RUN_OPTS
-
+	  RKT_OPTS                 
+	  RKT_FETCH_OPTS           
+	  RKT_RUN_OPTS             

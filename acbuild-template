@@ -495,7 +495,6 @@ function build() {
 			shift
 		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
 			_handler='echo $_output'
-			_silent=true
 			shift
 		else
 			break
@@ -532,7 +531,7 @@ function build() {
 #      applied:     is being passed to 'build'
 #      script:      is being passed to 'build'
 sign() {
-	local _output=
+	local _output="$output.asc"
 	local _handler=-
 	local _silent=false
 	local _build_opts=
@@ -557,7 +556,6 @@ sign() {
 
 	if [[ -z "$sign_output" ]]; then
 		build $_build_opts || return $?
-		[[ -z "$_output" ]] && _output="$output.asc"
 		local _opts=$(necho "${GPG_OPTS:-}" \
 				| add-argument --armor -a \
 				| add-argument "--output '$_output'" --output \
@@ -655,6 +653,12 @@ function upload-git() {
 forward() {
 	if   [[ -z "${1:-}" ]]; then
 		return
+	elif [[ help    ==  "$1" ]] \
+	  || [[ _--help == "_$1" ]] \
+	  || [[ _-h     == "_$1" ]] \
+	  || [[ _-?     == "_$1" ]]; then
+		shift
+		print-usage "$@" || return $?
 	elif [[ apply   == "$1" ]]; then
 		shift
 		apply "$@" || return $?
@@ -674,10 +678,12 @@ forward() {
 		shift
 		run "$@" || return $?
 	else
-		errxit "unexpected argument $1"
+		errcho "acbuild-template: forward: unexpected argument $1"
+		return 1
 	fi
 }
 
+# fun: main <acbuild-template args>
 function main() {
 	if [[ -z "${1:-}" ]]; then
 		errcho 'at least one command expected'
@@ -717,7 +723,6 @@ function main() {
 
 
 
-# todo better condition wanted
 if [[ "$0" == "$BASH_SOURCE" ]]; then
 	main "$@" || exit $?
 fi
