@@ -450,21 +450,59 @@ add-argument() {
 
 
 
+# fun: parse-args -o/--output:output= -s/--silent:silent=true
+# txt: print to stdout bash-script which, being executied, parses arguments
+print-parser() {
+	echo -n 'while [[ -n "${1:-}" ]]; do
+    '
+	while [[ -n "${1+x}" ]]; do
+		# split arguments by colon
+		IFS=: read keys commands <<< "$1"
+		if [[ -z "$commands" ]]; then
+			errcho "print-parser: command list not defined in expression: $1"
+			return 1
+		fi
+		echo "if [[ \"/$keys/\" == *\"/\$1/\"* ]]; then"
+
+		# split commands by comma
+		local _value_wanted=false
+		IFS=, read -r -a commands <<< "$commands"
+		for command in "${commands[@]}"; do
+			# split command by equality
+			IFS== read variable value <<< "$command"
+		    if [[ "$command" != *=* ]]; then
+		    	if [[ false == "$_value_wanted" ]]; then
+		    		echo "        if [[ -z \"\${2+x}\" ]]; then
+	    errcho \"missing argument for \$1\"
+        fi"
+		    		_value_wanted=true
+		    	fi
+		    	echo "        $variable=\"\$2\""
+		    else
+		    	echo "        $variable='$value'"
+		    fi
+		done
+
+		echo '        shift'
+		[[ true == $_value_wanted ]] && echo '        shift'
+		echo -n '    el'
+		shift
+	done
+	echo 'se
+        break
+    fi'
+	echo 'done'
+}
+
+
+
 # fun: apply [-o|--output <destination>]
 # txt: lazily apply transformation to script remplate and stdout result
 # env: script:  script template file name to process
 #      applied: global variable to write applied script data
 function apply() {
 	local _output=-
-	while [[ -n "${1:-}" ]]; do
-		if   [[ _-o == "_${1:-}" ]] || [[ _--output == "_${1:-}" ]]; then
-			[[ -n "${2:-}" ]] || errxit "missing value for $1"
-			_output="$2"
-			shift 2
-		else
-			break
-		fi
-	done
+	eval "$(print-parser -o/--output:_output)"
 	if [[ -z "$applied" ]]; then
 		applied=$(get-file-content "$script" | process-template) || return $?
 	fi
@@ -478,29 +516,14 @@ function apply() {
 # txt: lazily build image from script template
 # env: script:    is being passed to 'apply'
 #      applied:   is being passed to 'apply'
+
 #      cache_dir: directory for storing temp data
 #      output:    global variable to save written image file name for lazyness
 function build() {
 	local _output=
 	local _handler=-
 	local _silent=false
-	#	local _handler='echo $(recho)'
-	while [[ -n "${1:-}" ]]; do
-		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
-			[[ -n "${2:-}" ]] || errxit "missing value for $1"
-			_output="$2"
-			shift 2
-		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
-			_handler=
-			_silent=true
-			shift
-		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
-			_handler='echo $_output'
-			shift
-		else
-			break
-		fi
-	done
+	eval "$(print-parser -o/--output:_output -s/--silent:_silent=true,_handler= "-n/--print-name:_handler=echo \$_output")"
 
 	if [[ -z "$output" ]]; then
 		# do the work
@@ -536,24 +559,7 @@ sign() {
 	local _handler=-
 	local _silent=false
 	local _build_opts=
-	while [[ -n "${1:-}" ]]; do
-		if   [[ _-o == "_$1" ]] || [[ _--output == "_$1" ]]; then
-			[[ -n "${2:-}" ]] || errxit "missing value for $1"
-			_output="$2"
-			shift 2
-		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
-			_handler=
-			_silent=true
-			_build_opts=--silent
-			shift
-		elif [[ _-n == "_$1" ]] || [[ _--print-name == "_$1" ]]; then
-			_handler='echo $_output'
-			_build_opts=--silent
-			shift
-		else
-			break
-		fi
-	done
+	eval "$(print-parser -o/--output:_output "-s/--silent:_silent=true,_handler=echo -n,_build_opts=--silent" "-n/--print-name:_handler=echo \$_output,_build_opts=--silent")"
 
 	if [[ -z "$sign_output" ]]; then
 		build $_build_opts || return $?
@@ -584,20 +590,7 @@ function install() {
 	local _handler=-
 	local _silent=false
 	local _build_opts=
-	while [[ -n "${1:-}" ]]; do
-		if [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
-			_handler=
-			_silent=true
-			_build_opts=--silent
-			shift
-		elif [[ _-n == "_$1" ]] || [[ _--print-hash == "_$1" ]]; then
-			_handler='echo $image_hash'
-			_build_opts=--silent
-			shift
-		else
-			break
-		fi
-	done
+	eval "$(print-parser -s/--silent:_silent=true,_handler=,_build_opts=--silent "-n/--print-hash:_handler=echo \$image_hash,_build_opts=--silent")"
 
 	if [[ -z "$image_hash" ]]; then
 		build $_build_opts || return $?
@@ -622,6 +615,7 @@ function install() {
 
 # fun: git-upload <file to upload> <git repo url>
 # txt: upload file to git repo
+#      make new branch named after file, commit single file and push
 git-upload() {
 	local _file="$1" \
 			&& local _repo="$2" \
@@ -659,24 +653,8 @@ upload() {
 	local _silent=false
 	local _build_opts=
 	local _repo=
-	while [[ -n "${1:-}" ]]; do
-		if   [[ _-r == "_$1" ]] || [[ _--repo-url == "_$1" ]]; then
-			if [[ -z "${2:-}" ]]; then
-				errcho "upload: missing value for $1"
-				return 1
-			fi
-			_repo="$2"
-			shift
-			shift
-		elif [[ _-s == "_$1" ]] || [[ _--silent == "_$1" ]]; then
-			_handler=
-			_silent=true
-			_build_opts=--silent
-			shift
-		else
-			break
-		fi
-	done
+	eval "$(print-parser -r/--repo-url:_repo "-s/--silent:_silent=true,_handler=echo -n,_build_opts=--silent")"
+
 
 	if [[ -z "$_repo" ]]; then
 		errcho "repository not set"
@@ -702,6 +680,7 @@ function run() {
 	install || return $?
 
 	# replace file names in volume declarations relative to script location, with absolute path
+	# to make possible the following: --volume name,kind=host,source=.
 	local _dir=$(dirname $script)
 	local _opts=$(necho "$@" | sed "s|source=\([^/]\)|source=$_dir/\1|g")
 
@@ -721,33 +700,15 @@ function run() {
 forward() {
 	if   [[ -z "${1:-}" ]]; then
 		return
-	elif [[ help    ==  "$1" ]] \
-	  || [[ _--help == "_$1" ]] \
-	  || [[ _-h     == "_$1" ]] \
-	  || [[ _-?     == "_$1" ]]; then
+	elif [[ ' help --help -h -? ' == *" $1 "* ]]; then
 		shift
-		print-usage "$@" || return $?
-	elif [[ upload   == "$1" ]]; then
+		print-usage "$@"
+		return $?
+	elif [[ ' apply build sign install upload run ' == *" $1 "* ]]; then
+		local _command="$1"
 		shift
-		upload "$@" || return $?
-	elif [[ apply   == "$1" ]]; then
-		shift
-		apply "$@" || return $?
-	elif [[ build   == "$1" ]]; then
-		shift
-		build "$@" || return $?
-	elif [[ sign    == "$1" ]]; then
-		shift
-		sign "$@" || return $?
-	elif [[ install == "$1" ]]; then
-		shift 
-		install "$@" || return $?
-	elif [[ upload-git == "$1" ]]; then
-		shift
-		upload "$@" || return $?
-	elif [[ run     == "$1" ]]; then
-		shift
-		run "$@" || return $?
+		eval $_command "$@"
+		return $?
 	else
 		errcho "acbuild-template: forward: unexpected argument $1"
 		return 1
