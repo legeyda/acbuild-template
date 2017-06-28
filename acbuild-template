@@ -15,7 +15,7 @@ Usage:
     [build [-o|--output <output>] [-s|--silent|-n|--print-name] \
     [sign  [-o|--output <output>] [-s|--silent|-n|--print-name] \
     [install [-s|--silent|-n|--print-hash]] \
-    [upload [-r|--repo-url <git repository url>]] \
+    [upload (--repository|-r) git-repo-url] \
     [run <rkt image run parameters>]
 
 Options:
@@ -638,7 +638,7 @@ git-upload() {
 			|| return $?
 }
 
-# fun: upload [--repository|-r git-repo-url] 
+# fun: upload (--repository|-r) git-repo-url
 # env: cache_dir
 #      script
 #      sign_output: if set, is also uploading
@@ -654,7 +654,6 @@ upload() {
 	local _build_opts=
 	local _repo=
 	eval "$(print-parser -r/--repo-url:_repo "-s/--silent:_silent=true,_handler=echo -n,_build_opts=--silent")"
-
 
 	if [[ -z "$_repo" ]]; then
 		errcho "repository not set"
