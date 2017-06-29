@@ -10,12 +10,12 @@ function print-usage() {
 acbuild-template, make acbuild-scripts more declarative
 
 Usage:	
-  acbuild-template [-i|--script <script>] \
-    [apply [-o|--output <output>]] \
-    [build [-o|--output <output>] [-s|--silent|-n|--print-name] \
-    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name] \
-    [install [-s|--silent|-n|--print-hash]] \
-    [upload (--repository|-r) git-repo-url] \
+  acbuild-template [-i|--script <script>] \\
+    [apply [-o|--output <output>]] \\
+    [build [-o|--output <output>] [-s|--silent|-n|--print-name] \\
+    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name] \\
+    [install [-s|--silent|-n|--print-hash]] \\
+    [upload (--repository|-r) <git-repo-url>] \\
     [run <rkt image run parameters>]
 
 Options:

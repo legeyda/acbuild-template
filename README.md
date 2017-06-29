@@ -92,7 +92,7 @@ From `acbuild-template help`:
 	    [build [-o|--output <output>] [-s|--silent|-n|--print-name] \
 	    [sign  [-o|--output <output>] [-s|--silent|-n|--print-name] \
 	    [install [-s|--silent|-n|--print-hash]] \
-	    [upload upload (--repository|-r) git-repo-url] \
+	    [upload upload (--repository|-r) <git-repo-url>] \
 	    [run <rkt image run parameters>]
 
 	Options:
