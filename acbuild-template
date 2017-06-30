@@ -434,7 +434,7 @@ wrap-silent() {
 
 # fun: add-argument <append> [<check1> [<check2> ...]]
 # txt: read stdin, then check if any of arguments are substrings of stdin,
-#      if so append first argument to stdin, then print the result to stdout
+#      if so, append first argument to stdin, then print the result to stdout
 add-argument() {
 	local _value="$(recho)"
 	necho "$_value"
@@ -450,7 +450,7 @@ add-argument() {
 
 
 
-# fun: parse-args -o/--output:output= -s/--silent:silent=true
+# fun: print-parser -o/--output:output -s/--silent:silent=true
 # txt: print to stdout bash-script which, being executied, parses arguments
 print-parser() {
 	echo -n 'while [[ -n "${1:-}" ]]; do
@@ -493,6 +493,9 @@ print-parser() {
     fi'
 	echo 'done'
 }
+
+
+
 
 
 
