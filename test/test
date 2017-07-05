@@ -149,12 +149,33 @@ assert-ok     'echo put-hello | put-file-content ../target/_test'
 assert-equals 'put-hello' "$(cat ../target/_test)"
 
 
-# wrap-silent
-assert-equals ''    "$(wrap-silent 'echo hello')"
-assert-equals hello "$(wrap-silent 'echo hello' recho)"
-assert-equals hello "$(wrap-silent 'echo hello' 'grep hello')"
-assert-equals hello "$(wrap-silent 'echo hello' 'grep hello')"
-assert-equals ''    "$(wrap-silent 'echos')"
+# silent-eval
+unset silent_eval_output
+unset silent
+unset handler
+
+silent_eval_output=
+silent= silent-eval echo hello, tester1
+assert-equals 'hello, tester1' "$silent_eval_output"
+
+silent_eval_output=
+silent=true silent-eval echo hello, tester2
+assert-equals 'hello, tester2' "$silent_eval_output"
+
+silent_eval_output=
+silent=false silent-eval echo hello, tester3
+assert-equals 'hello, tester3' "$silent_eval_output"
+
+
+assert-equals 'hello, tester' "$(silent-eval echo hello, tester)"
+
+silent_eval_output=
+silent=true handler=last-line silent-eval echo '"1
+2
+3"'
+assert-equals '3' "$silent_eval_output"
+
+
 
 
 # add-argument

@@ -406,28 +406,55 @@ put-file-content() {
 	fi
 }
 
-# fun: wrap-silent command <handler>
-# txt: evaluates commnd, in case of success pipes stdout to handler and outputs result
-#      in case of error, print diagnosting information to stderr
-wrap-silent() {
-	local producer="$1"
-	local handler="${2:-}"
-	local data=
 
-	[[ _- == "_$1" ]] && producer=recho
-	if data="$(eval $producer)" ; then
-		if [[ _- == "_$handler" ]]; then
-			necho "$data"
-		elif [[ -n "$handler" ]]; then
-			necho "$data" | eval "$handler" || return $?
+# fun:
+# txt: eval
+#      - optionally suppresses output
+#      - if supplied, pipes to handle
+#      - saves command output (after handle) to $output
+# env: silent:  if true, swallow output
+#      handler: if nonzero, pipes output through it before saving
+#      silent_eval_output:  saves output (after handler) here
+silent-eval() {
+	# default values
+	: ${silent_eval_output:=}
+	local _silent="${silent:-false}"
+	local _handler="${handler:-}"
+
+	# eval command and check success
+	local _output
+	if _output=$(eval "$@"); then
+		if [[ false == "$_silent" ]]; then
+			echo "$_output"
 		fi
 	else
-		local code=$?
-		errcho "error running command: $producer"
-		errcho "return code: $code"
-		[[ -n "$data" ]] && errcho "stderr (if available) is above, standard output was: $data"
-		return $code
+		local _code=$?
+		errcho "error running command: $@"
+		errcho "return code: $_code"
+		if [[ true == "$_silent" ]] && [[ -n "$_output" ]]; then
+			errcho "standard output was: "
+			errcho "$_output"
+		fi
+		return $_code
 	fi
+
+	# apply handler
+	if [[ -z "$_handler" ]]; then
+		silent_eval_output=$_output
+	else
+		# pipe command output through handler
+		if ! silent_eval_output=$(eval $_handler <<< "$_output"); then
+			local _code=$?
+			errcho "error running command: $_handler"
+			errcho "return code: $code"
+			if [[ true == "$_silent}" ]] && [[ -n "$_output" ]]; then
+				errcho "standard output was: "
+				errcho "$_output"
+			fi
+			return $_code
+		fi
+	fi
+
 }
 
 
@@ -523,26 +550,33 @@ function apply() {
 #      image_output: global variable to save written image file name for lazyness
 function build() {
 	local _output=
-	local _handler=-
-	local _silent=false
-	eval "$(print-parser -o/--output:_output -s/--silent:_silent=true,_handler= "-n/--print-name:_handler=echo \$_output")"
+	local silent=false
+	local _print_name=true
+	eval "$(print-parser -o/--output:_output -s/--silent:silent=true,_print_name=false -n/--print-name:silent=true,_print_name=true)"
 
 	if [[ -z "$image_output" ]]; then
 		# do the work
 		cache_dir=$(get-cache-dir)
 		local script_data=$(apply) || return $?
 		_output=$(echo "$script_data" | parse-image-output)
-		#errcho "script_data is $script_data"
-		[[ -z "$_output" ]] && errxit 'wrong script output'
+		if [[ -z "$_output" ]]; then
+			errcho 'wrong script output'
+			return 1
+		fi
 
 		mkdir -p "$(dirname '$_output')" "$cache_dir"
 		echo "$script_data" > "$cache_dir/acbuild-script"
 
 		local _opts=$(add-argument "--work-path '$cache_dir'" --work-path <<< "${ACBUILD_OPTS:-}")
 		rm -rf "$cache_dir/.acbuild"
-		wrap-silent "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" "$_handler" || return $?
+		
+		silent-eval "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" || return $?
+		errcho "---------------- _output is $_output ---------"
 		image_output="$_output"
-	elif [[ true != "$_silent" ]]; then
+		if [[ true == "$_print_name" ]]; then
+			echo "$image_output"
+		fi
+	elif [[ true != "$silent" ]]; then
 		echo "$image_output"
 	fi
 	forward "$@" || return $?
@@ -558,10 +592,10 @@ function build() {
 #      script:       is being passed to 'build'
 sign() {
 	local _output="$image_output.asc"
-	local _handler=-
-	local _silent=false
+	local silent=false
 	local _build_opts=
-	eval "$(print-parser -o/--output:_output "-s/--silent:_silent=true,_handler=echo -n,_build_opts=--silent" "-n/--print-name:_handler=echo \$_output,_build_opts=--silent")"
+	local _print_name=true
+	eval "$(print-parser -o/--output:_output -s/--silent:silent=true,_print_name=false,_build_opts=--silent -n/--print-name:silent=true,_print_name=true,_build_opts=--silent)"
 
 	if [[ -z "$sign_output" ]]; then
 		build $_build_opts || return $?
@@ -569,9 +603,15 @@ sign() {
 				| add-argument --armor -a \
 				| add-argument "--output '$_output'" --output \
 				| add-argument "--detach-sig '$image_output'" --detach-sig)
-		wrap-silent "${GPG:-gpg} $_opts" "$_handler" || return $?
+		errcho "================= silent is $silent"
+		errcho "================= args are $@"
+		errcho "================= command is '${GPG:-gpg}' $_opts"
+		silent-eval "'${GPG:-gpg}' $_opts" || return $?
 		sign_output="$_output"
-	elif [[ true != "$_silent" ]]; then
+		if [[ true == "$_print_name" ]]; then
+			echo "$sign_output"
+		fi
+	elif [[ true != "$silent" ]]; then
 		echo "$sign_output"
 	fi
 	forward "$@" || return $?
@@ -589,10 +629,10 @@ sign() {
 #      applied:      is being passed to 'sign'
 #      script:       is being passed to 'sign'
 function install() {
-	local _handler=-
-	local _silent=false
+	local silent=false
+	local _print_hash=true
 	local _build_opts=
-	eval "$(print-parser -s/--silent:_silent=true,_handler=,_build_opts=--silent "-n/--print-hash:_handler=echo \$image_hash,_build_opts=--silent")"
+	eval "$(print-parser -s/--silent:silent=true,_print_hash=false,_build_opts=--silent -n/--print-hash:silent=true,_print_hash=true,_build_opts=--silent)"
 
 	if [[ -z "$image_hash" ]]; then
 		build $_build_opts || return $?
@@ -604,11 +644,12 @@ function install() {
 			_command="$_command --signature '$sign_output'"
 		fi
 
-		local _data
-		_data="$(eval $_command)" || return $?
-		image_hash=$(necho "$_data" | last-line)
-		necho "$_data" | wrap-silent - "$_handler" || return $?
-	elif [[ true != "$_silent" ]]; then
+		handler=last-line silent-eval "$_command" || return $?
+		image_hash="$silent_eval_output"
+		if [[ true == "$_print_hash" ]]; then
+			echo "$image_hash"
+		fi
+	elif [[ true != "$silent" ]]; then
 		echo "$image_hash"
 	fi
 
@@ -651,11 +692,10 @@ git-upload() {
 #      applied:      is being passed to 'sign'
 #      script:       is being passed to 'sign'
 upload() {
-	local _handler=-
-	local _silent=false
-	local _build_opts=
 	local _repo=
-	eval "$(print-parser -r/--repo-url:_repo "-s/--silent:_silent=true,_handler=echo -n,_build_opts=--silent")"
+	local silent=false
+	local _build_opts=	
+	eval "$(print-parser -r/--repo-url:_repo -s/--silent:silent=true,_build_opts=--silent)"
 
 	if [[ -z "$_repo" ]]; then
 		errcho "repository not set"
@@ -665,7 +705,7 @@ upload() {
 	build $_build_opts || return $?
 	local _command="git-upload '$image_output' '$_repo'"
 	[[ -n "$sign_output" ]] && _command="$_command && git-upload '$sign_output' '$_repo'"
-	wrap-silent "$_command" "$_handler" || return $?
+	silent-eval "$_command" || return $?
 	
 	forward "$@" || return $?
 }
@@ -697,24 +737,30 @@ function run() {
 #      applied
 #      image_output
 #      sign_output
-#      image_hash      
+#      image_hash
 forward() {
 	if   [[ -z "${1:-}" ]]; then
 		return
-	elif [[ ' help --help -h -? ' == *" $1 "* ]]; then
-		shift
-		print-usage "$@"
-		return $?
-	elif [[ ' apply build sign install upload run ' == *" $1 "* ]]; then
-		local _command="$1"
-		shift
-		eval $_command "$@"
-		return $?
-	else
-		errcho "acbuild-template: forward: unexpected argument $1"
-		return 1
 	fi
+	for x in help --help -h -?; do
+		if [[ "_$x" == "_$1" ]]; then
+			shift
+			print-usage "$@"
+			return $?
+		fi
+	done
+	for x in  apply build sign install upload run; do
+		if [[ "_$x" == "_$1" ]]; then
+			shift
+			eval $_command "$@"
+			return $?
+		fi
+	done
+	errcho "acbuild-template: forward: unexpected argument $1"
+	return 1
 }
+
+
 
 # fun: main <acbuild-template args>
 function main() {
