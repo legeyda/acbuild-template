@@ -157,7 +157,7 @@ function parse-label() {
 
 # fun: cat acbuild-script |   parse-oputout
 # txt: parse acbuld-script and get image version (value ignored if contains placeholders)
-function parse-output() {
+function parse-image-output() {
 	#sed -ne 's/^\s*write\s\+\(--overwrite\s\+\)\?\([^{} ]*\?\)\s*$/\2/gp' | last-line | stream-value
 	sed -ne 's/^\s*write\s\+\(--overwrite\s\+\)\?["'\'']\?\([^{}"'\'' ]*\?\)["'\'']\?\s*$/\2/gp' | last-line | stream-value
 }
@@ -285,7 +285,7 @@ function get-base-name() {
 #      arch:
 #      ext:
 #      base_name:
-#      output: 
+#      image_output: 
 function apply-template() {
 	local value
 	read -d '' value
@@ -299,12 +299,12 @@ function apply-template() {
 	value=${value//\{\{base-name\}\}/$base_name}
 	value=${value//\{\{insecure\}\}/$insecure}
 	value=${value//\{\{engine\}\}/$engine}
-	value=${value//\{\{output\}\}/$output}
+	value=${value//\{\{output\}\}/$image_output}
 	echo "$value"
 }
 
 
-# fun: get-output
+# fun: get-image-output
 # env: dir_name
 #      name:
 #      version:
@@ -312,10 +312,10 @@ function apply-template() {
 #      arch:
 #      ext:
 #      base_name:
-function get-output() {
-	parse-output \
-			|| necho "${1:-}"             | stream-value | output="${output:-$dir_name/$base_name}" apply-template | stream-value \
-			|| necho "${ACBUILD_IMAGE:-}" | stream-value | output="${output:-$dir_name/$base_name}" apply-template | stream-value \
+function get-image-output() {
+	parse-image-output \
+			|| necho "${1:-}"             | stream-value | image_output="${image_output:-$dir_name/$base_name}" apply-template | stream-value \
+			|| necho "${ACBUILD_IMAGE:-}" | stream-value | image_output="${image_output:-$dir_name/$base_name}" apply-template | stream-value \
 			|| necho "$dir_name/$base_name"
 }
 
@@ -328,22 +328,22 @@ function process-template {
 	data=$(stream-value) || return $?
 
 	cache_dir=$(get-cache-dir)
-	local dir_name=$(                get-dir-name)
-	local mode=$(     echo "$data" | get-mode)
-	local name=$(     echo "$data" | get-name)
-	local version=$(  echo "$data" | get-version)
-	local os=$(       echo "$data" | get-os)
-	local arch=$(     echo "$data" | get-arch)
-	local ext=$(      echo "$data" | get-ext)
-	local base_name=$(               get-base-name)
-	local insecure=$(                get-insecure)
-	local engine=$(                  get-engine)
-	local output=$(   echo "$data" | get-output "${2:-}")
+	local dir_name=$(                   get-dir-name)
+	local mode=$(        echo "$data" | get-mode)
+	local name=$(        echo "$data" | get-name)
+	local version=$(     echo "$data" | get-version)
+	local os=$(          echo "$data" | get-os)
+	local arch=$(        echo "$data" | get-arch)
+	local ext=$(         echo "$data" | get-ext)
+	local base_name=$(                  get-base-name)
+	local insecure=$(                   get-insecure)
+	local engine=$(                     get-engine)
+	local image_output=$(echo "$data" | get-image-output "${2:-}")
 
 	# resolve placeholders inside variables
 	# due to transitive dependencies up to 8 iteration needed, usually none
 	for i in 1 2 3 4 5 6 7 8 9; do
-		if [[ "$dir_name$mode$name$version$os$arch$ext$base_name$output" != *"{{"* ]]; then
+		if [[ "$dir_name$mode$name$version$os$arch$ext$base_name$image_output" != *"{{"* ]]; then
 			break
 		elif [[ $i == 9 ]]; then
 			errcho "unable to resolve placeholders, values are:
@@ -355,19 +355,19 @@ function process-template {
     arch:      $arch
     ext:       $ext
     base_name: $base_name
-    output:    $output"
+    output:    $image_output"
 			return 1
 		fi
 
-		dir_name=$(  echo "$dir_name"  | apply-template)
-		mode=$(      echo "$mode"      | apply-template)
-		name=$(      echo "$name"      | apply-template)
-		version=$(   echo "$version"   | apply-template)
-		os=$(        echo "$os"        | apply-template)
-		arch=$(      echo "$arch"      | apply-template)
-		ext=$(       echo "$ext"       | apply-template)
-		base_name=$( echo "$base_name" | apply-template)
-		output=$(    echo "$output"    | apply-template)
+		dir_name=$(    echo "$dir_name"     | apply-template)
+		mode=$(        echo "$mode"         | apply-template)
+		name=$(        echo "$name"         | apply-template)
+		version=$(     echo "$version"      | apply-template)
+		os=$(          echo "$os"           | apply-template)
+		arch=$(        echo "$arch"         | apply-template)
+		ext=$(         echo "$ext"          | apply-template)
+		base_name=$(   echo "$base_name"    | apply-template)
+		image_output=$(echo "$image_output" | apply-template)
 	done
 
 	echo -n "$data" | apply-template
@@ -517,22 +517,21 @@ function apply() {
 
 # fun: build [-o|--output <output>] [-s|--silent|-n|--print-name]
 # txt: lazily build image from script template
-# env: script:    is being passed to 'apply'
-#      applied:   is being passed to 'apply'
-
-#      cache_dir: directory for storing temp data
-#      output:    global variable to save written image file name for lazyness
+# env: script:       is being passed to 'apply'
+#      applied:      is being passed to 'apply'
+#      cache_dir:    directory for storing temp data
+#      image_output: global variable to save written image file name for lazyness
 function build() {
 	local _output=
 	local _handler=-
 	local _silent=false
 	eval "$(print-parser -o/--output:_output -s/--silent:_silent=true,_handler= "-n/--print-name:_handler=echo \$_output")"
 
-	if [[ -z "$output" ]]; then
+	if [[ -z "$image_output" ]]; then
 		# do the work
 		cache_dir=$(get-cache-dir)
 		local script_data=$(apply) || return $?
-		_output=$(echo "$script_data" | parse-output)
+		_output=$(echo "$script_data" | parse-image-output)
 		#errcho "script_data is $script_data"
 		[[ -z "$_output" ]] && errxit 'wrong script output'
 
@@ -542,9 +541,9 @@ function build() {
 		local _opts=$(add-argument "--work-path '$cache_dir'" --work-path <<< "${ACBUILD_OPTS:-}")
 		rm -rf "$cache_dir/.acbuild"
 		wrap-silent "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" "$_handler" || return $?
-		output="$_output"
+		image_output="$_output"
 	elif [[ true != "$_silent" ]]; then
-		echo "$output"
+		echo "$image_output"
 	fi
 	forward "$@" || return $?
 }
@@ -553,12 +552,12 @@ function build() {
 
 # fun: sign [-o|--output <output>] [-s|--silent|-n|--print-name-only] [-p|--keyring <keyring> -k|--secret-keyring <secret keyring>]
 # env: sign_output: global variable to save written signature file name for lazyness
-#      output:      global image output file
-#      cache_dir:   is being passed to 'build'
-#      applied:     is being passed to 'build'
-#      script:      is being passed to 'build'
+#      image_output: global image output file
+#      cache_dir:    is being passed to 'build'
+#      applied:      is being passed to 'build'
+#      script:       is being passed to 'build'
 sign() {
-	local _output="$output.asc"
+	local _output="$image_output.asc"
 	local _handler=-
 	local _silent=false
 	local _build_opts=
@@ -569,7 +568,7 @@ sign() {
 		local _opts=$(necho "${GPG_OPTS:-}" \
 				| add-argument --armor -a \
 				| add-argument "--output '$_output'" --output \
-				| add-argument "--detach-sig '$output'" --detach-sig)
+				| add-argument "--detach-sig '$image_output'" --detach-sig)
 		wrap-silent "${GPG:-gpg} $_opts" "$_handler" || return $?
 		sign_output="$_output"
 	elif [[ true != "$_silent" ]]; then
@@ -582,13 +581,13 @@ sign() {
 # fun: install [-s|--silent|-n|--print-hash]
 # env: cache_dir
 #      script
-#      sign_output: if set, is used when rkt-fetching
-#      applied:     is being passed to 'sign'
-#      output:      is being passed to 'sign'
-#      image_hash:  is being passed to 'sign'
-#      cache_dir:   is being passed to 'sign'
-#      applied:     is being passed to 'sign'
-#      script:      is being passed to 'sign'
+#      sign_output:  if set, is used when rkt-fetching
+#      applied:      is being passed to 'sign'
+#      image_output: is being passed to 'sign'
+#      image_hash:   is being passed to 'sign'
+#      cache_dir:    is being passed to 'sign'
+#      applied:      is being passed to 'sign'
+#      script:       is being passed to 'sign'
 function install() {
 	local _handler=-
 	local _silent=false
@@ -598,7 +597,7 @@ function install() {
 	if [[ -z "$image_hash" ]]; then
 		build $_build_opts || return $?
 		local _opts=$(echo "${RKT_FETCH_OPTS:=}" | add-argument --full)
-		real_output=$(realpath "$output")
+		real_output=$(realpath "$image_output")
 
 		local _command="'${RKT:-rkt}' ${RKT_OPTS:-} fetch $_opts 'file://$real_output'"
 		if [[ -n "$sign_output" ]]; then
@@ -644,13 +643,13 @@ git-upload() {
 # fun: upload (--repository|-r) git-repo-url
 # env: cache_dir
 #      script
-#      sign_output: if set, is also uploading
-#      applied:     is being passed to 'sign'
-#      output:      is being passed to 'sign'
-#      image_hash:  is being passed to 'sign'
-#      cache_dir:   is being passed to 'sign'
-#      applied:     is being passed to 'sign'
-#      script:      is being passed to 'sign'
+#      sign_output:  if set, is also uploading
+#      applied:      is being passed to 'sign'
+#      image_output: is being passed to 'sign'
+#      image_hash:   is being passed to 'sign'
+#      cache_dir:    is being passed to 'sign'
+#      applied:      is being passed to 'sign'
+#      script:       is being passed to 'sign'
 upload() {
 	local _handler=-
 	local _silent=false
@@ -664,7 +663,7 @@ upload() {
 	fi
 
 	build $_build_opts || return $?
-	local _command="git-upload '$output' '$_repo'"
+	local _command="git-upload '$image_output' '$_repo'"
 	[[ -n "$sign_output" ]] && _command="$_command && git-upload '$sign_output' '$_repo'"
 	wrap-silent "$_command" "$_handler" || return $?
 	
@@ -675,7 +674,7 @@ upload() {
 # env: cache_dir
 #      script
 #      applied
-#      output
+#      image_output
 #      sign_output
 #      image_hash
 function run() {
@@ -696,7 +695,7 @@ function run() {
 # env: cache_dir
 #      script
 #      applied
-#      output
+#      image_output
 #      sign_output
 #      image_hash      
 forward() {
@@ -736,7 +735,7 @@ function main() {
 	local applied=
 
 	# cache to store written image file name between build-calls
-	local output=
+	local image_output=
 	local sign_output=
 	local image_hash=
 

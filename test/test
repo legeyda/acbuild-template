@@ -190,10 +190,10 @@ assert-error  'echo | parse-label version'
 
 
 # parse output
-assert-equals 'output'  $(echo 'write --overwrite output' | parse-output)
-assert-equals 'output'  $(echo 'write --overwrite "output"' | parse-output)
-assert-equals 'output2' $(echo 'write output2' | parse-output)
-assert-equals ''        $(echo 'label add version {{OUT_VAR}}' | parse-output)
+assert-equals 'output'  $(echo 'write --overwrite output' | parse-image-output)
+assert-equals 'output'  $(echo 'write --overwrite "output"' | parse-image-output)
+assert-equals 'output2' $(echo 'write output2' | parse-image-output)
+assert-equals ''        $(echo 'label add version {{OUT_VAR}}' | parse-image-output)
 
 
 # mode-to-ext
@@ -279,17 +279,17 @@ assert-equals env-base-name         $(ACBUILD_IMAGE_BASE_NAME=env-base-name name
 assert-equals image-vers-oss-aar.ex $(ACBUILD_IMAGE_BASE_NAME=              name=image version=vers os=oss arch=aar ext=ex get-base-name)
 
 
-# get-output
-assert-equals image.aci                     $(cat script | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE='{{ext}}.{{arch}}-{{os}}-{{version}}-{{name}}-env' get-output '{{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}-arg')
-assert-equals image-vers-oss-aar.ex-arg     $(echo       | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE='{{ext}}.{{arch}}-{{os}}-{{version}}-{{name}}-env' get-output '{{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}-arg')
-assert-equals ex.aar-oss-vers-image-env     $(echo       | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE='{{ext}}.{{arch}}-{{os}}-{{version}}-{{name}}-env' get-output)
-assert-equals /tmp/base.zip                 $(echo       | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE=                                                   get-output)
+# get-image-output
+assert-equals image.aci                     $(cat script | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE='{{ext}}.{{arch}}-{{os}}-{{version}}-{{name}}-env' get-image-output '{{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}-arg')
+assert-equals image-vers-oss-aar.ex-arg     $(echo       | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE='{{ext}}.{{arch}}-{{os}}-{{version}}-{{name}}-env' get-image-output '{{name}}-{{version}}-{{os}}-{{arch}}.{{ext}}-arg')
+assert-equals ex.aar-oss-vers-image-env     $(echo       | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE='{{ext}}.{{arch}}-{{os}}-{{version}}-{{name}}-env' get-image-output)
+assert-equals /tmp/base.zip                 $(echo       | dir_name=/tmp mode=appc name=image version=vers os=oss arch=aar ext=ex insecure=i engine=en base_name=base.zip ACBUILD_IMAGE=                                                   get-image-output)
 
 
 # apply-template
 assert-equals 'dn m n v os a e bn i en out' \
 		"$(echo '{{dir-name}} {{mode}} {{name}} {{version}} {{os}} {{arch}} {{ext}} {{base-name}} {{insecure}} {{engine}} {{output}}' \
-				| dir_name=dn mode=m name=n version=v os=os arch=a ext=e base_name=bn insecure=i engine=en output=out apply-template)"
+				| dir_name=dn mode=m name=n version=v os=os arch=a ext=e base_name=bn insecure=i engine=en image_output=out apply-template)"
 
 
 # process-template
@@ -324,16 +324,16 @@ assert-equals "$data" "$(cat ../target/_test)"
 
 
 # build
-assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 output= build'
+assert-ok 'ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 image_output= build'
 assert-equals \
 		"/opt/${_TEST_ARCH}/test_image-1.2.3-${_TEST_OS}-${_TEST_ARCH}.aci" \
-		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 output= build --print-name)"
+		"$(ACBUILD=./mock-acbuild ACBUILD_CACHE_DIR=../target applied= script=script2 image_output= build --print-name)"
 assert-equals "$data" "$(cat ../target/acbuild-script)"
 
 
 
 # sign
-command='ACBUILD=echo GPG=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 output=image.aci sign_output= sign'
+command='ACBUILD=echo GPG=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 image_output=image.aci sign_output= sign'
 eval "$command"            | assert-contains --armor '--output image.aci.asc' '--detach-sig image.aci'
 assert-equals 'image.aci
 first-line' "$(eval $command | head -n 2)"
@@ -345,7 +345,7 @@ assert-equals image.aci.asc "$(eval $command --print-name | head -n 1)"
 
 
 # install
-command='RKT=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 output=image.aci sign_output= image_hash= install'
+command='RKT=./mock-command ACBUILD_CACHE_DIR=../target applied= script=script2 image_output=image.aci sign_output= image_hash= install'
 assert-equals 'image.aci
 first-line' "$(eval $command | head -n 2)"
 eval $command | tail -n 1 | assert-contains --full fetch file://$(realpath image.aci)
