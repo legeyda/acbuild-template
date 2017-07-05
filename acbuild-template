@@ -425,7 +425,7 @@ wrap-silent() {
 		local code=$?
 		errcho "error running command: $producer"
 		errcho "return code: $code"
-		[[ -n "$data" ]] && errcho "standard output: $data"
+		[[ -n "$data" ]] && errcho "stderr (if available) is above, standard output was: $data"
 		return $code
 	fi
 }
