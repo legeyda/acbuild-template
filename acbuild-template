@@ -549,28 +549,29 @@ function apply() {
 #      cache_dir:    directory for storing temp data
 #      image_output: global variable to save written image file name for lazyness
 function build() {
-	#local _output=
+	local _output=
 	local silent=false
 	local _print_name=true
-	eval "$(print-parser -o/--output:image_output -s/--silent:silent=true,_print_name=false -n/--print-name:silent=true,_print_name=true)"
+	eval "$(print-parser -o/--output:_output -s/--silent:silent=true,_print_name=false -n/--print-name:silent=true,_print_name=true)"
 
 	if [[ -z "$image_output" ]]; then
 		# do the work
 		cache_dir=$(get-cache-dir)
-		local script_data=$(apply) || return $?
-		image_output=$(echo "$script_data" | parse-image-output)
-		if [[ -z "$image_output" ]]; then
+		local script_data=$(image_output=$_output apply) || return $?
+		_output=$(echo "$script_data" | parse-image-output)
+		if [[ -z "$_output" ]]; then
 			errcho 'wrong script output'
 			return 1
 		fi
 
-		mkdir -p "$(dirname '$image_output')" "$cache_dir"
+		mkdir -p "$(dirname '$_output')" "$cache_dir"
 		echo "$script_data" > "$cache_dir/acbuild-script"
 
 		local _opts=$(add-argument "--work-path '$cache_dir'" --work-path <<< "${ACBUILD_OPTS:-}")
 		rm -rf "$cache_dir/.acbuild"
 		
 		silent-eval "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" || return $?
+		image_output="$_output"
 		if [[ true == "$_print_name" ]]; then
 			echo "$image_output"
 		fi
