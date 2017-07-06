@@ -70,7 +70,7 @@ Introduction
 		$ cd path/to/script
 		$ acbuild-template build --print-name
 		/tmp/tmp.duwasSaaLk/example_com_nginx-1.2.3-linux-amd64.aci
-		$ acbuild-template install --hash-only
+		$ acbuild-template install --print-hash
 		sha512-0a1cb92dc276b0f9bedf87981e61ecde
 		$ acbuild-template run
 		...

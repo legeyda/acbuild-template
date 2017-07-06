@@ -570,7 +570,7 @@ function build() {
 		local _opts=$(add-argument "--work-path '$cache_dir'" --work-path <<< "${ACBUILD_OPTS:-}")
 		rm -rf "$cache_dir/.acbuild"
 		
-		silent-eval "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" || return $?
+		silent=$silent handler= silent-eval "'${ACBUILD:=acbuild}' $_opts script $cache_dir/acbuild-script" || return $?
 		image_output="$_output"
 		if [[ true == "$_print_name" ]]; then
 			echo "$image_output"
@@ -604,7 +604,7 @@ sign() {
 				| add-argument --armor -a \
 				| add-argument "--output '$_output'" --output \
 				| add-argument "--detach-sig '$image_output'" --detach-sig)
-		silent-eval "'${GPG:-gpg}' $_opts" || return $?
+		silent="$silent" handler= silent-eval "'${GPG:-gpg}' $_opts" || return $?
 		sign_output="$_output"
 		if [[ true == "$_print_name" ]]; then
 			echo "$sign_output"
@@ -642,7 +642,7 @@ function install() {
 			_command="$_command --signature '$sign_output'"
 		fi
 
-		handler=last-line silent-eval "$_command" || return $?
+		silent="$silent" handler=last-line silent-eval "$_command" || return $?
 		image_hash="$silent_eval_output"
 		if [[ true == "$_print_hash" ]]; then
 			echo "$image_hash"
@@ -703,7 +703,7 @@ upload() {
 	build $_build_opts || return $?
 	local _command="git-upload '$image_output' '$_repo'"
 	[[ -n "$sign_output" ]] && _command="$_command && git-upload '$sign_output' '$_repo'"
-	silent-eval "$_command" || return $?
+	silent="$silent" handler= silent-eval "$_command" || return $?
 	
 	forward "$@" || return $?
 }
